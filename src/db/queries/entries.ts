@@ -1,11 +1,12 @@
 import type { SQLiteDatabase } from "expo-sqlite";
 
 import type { EntryRow } from "@/types/database";
+import type { MealType } from "@/types/nutrition";
 
 export interface AddEntryParams {
   product_id: string;
   product_name: string;
-  meal: string;
+  meal: MealType;
   quantity: number;
   date: string;
   calories: number;

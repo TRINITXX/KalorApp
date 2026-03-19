@@ -5,6 +5,7 @@ import { SPACING } from "@/constants/theme";
 import { useThemeColors } from "@/hooks/use-theme-colors";
 import { useWeeklyStats, useWeekComparisons } from "@/hooks/use-weekly-stats";
 import { useSettingsStore } from "@/stores/settings-store";
+import { formatDateISO } from "@/lib/product-utils";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -41,13 +42,6 @@ function getSunday(monday: Date): Date {
   const sunday = new Date(monday);
   sunday.setDate(monday.getDate() + 6);
   return sunday;
-}
-
-function formatDateISO(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
 }
 
 function formatWeekLabel(monday: Date, sunday: Date): string {

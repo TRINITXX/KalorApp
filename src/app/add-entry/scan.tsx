@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import {
   Alert,
   Linking,
@@ -18,43 +18,7 @@ import {
 import { useThemeColors } from "@/hooks/use-theme-colors";
 import { getProduct, upsertProduct } from "@/db/queries/products";
 import { fetchProduct } from "@/lib/open-food-facts";
-import type { ProductRow } from "@/types/database";
-
-function flattenProductForDb(product: {
-  id: string;
-  name: string;
-  brand: string | null;
-  image_url: string | null;
-  source: string;
-  nutrition_per_100g: {
-    calories: number;
-    proteins: number;
-    carbs: number;
-    fats: number;
-    fiber: number | null;
-    sugars: number | null;
-    saturated_fat: number | null;
-    salt: number | null;
-  };
-  last_quantity: number;
-}): Omit<ProductRow, "created_at"> {
-  return {
-    id: product.id,
-    name: product.name,
-    brand: product.brand,
-    image_url: product.image_url,
-    source: product.source,
-    calories: product.nutrition_per_100g.calories,
-    proteins: product.nutrition_per_100g.proteins,
-    carbs: product.nutrition_per_100g.carbs,
-    fats: product.nutrition_per_100g.fats,
-    fiber: product.nutrition_per_100g.fiber,
-    sugars: product.nutrition_per_100g.sugars,
-    saturated_fat: product.nutrition_per_100g.saturated_fat,
-    salt: product.nutrition_per_100g.salt,
-    last_quantity: product.last_quantity,
-  };
-}
+import { flattenProductForDb } from "@/lib/product-utils";
 
 export default function ScanScreen() {
   const router = useRouter();
@@ -63,40 +27,43 @@ export default function ScanScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
 
-  const handleBarCodeScanned = async ({ data }: BarcodeScanningResult) => {
-    if (scanned) return;
-    setScanned(true);
+  const handleBarCodeScanned = useCallback(
+    async ({ data }: BarcodeScanningResult) => {
+      if (scanned) return;
+      setScanned(true);
 
-    // Check local DB first
-    const localProduct = await getProduct(db, data);
-    if (localProduct) {
-      router.replace(`/add-entry/confirm?productId=${data}`);
-      return;
-    }
-
-    // Fetch from OpenFoodFacts
-    try {
-      const offProduct = await fetchProduct(data);
-      if (offProduct) {
-        await upsertProduct(db, flattenProductForDb(offProduct));
+      // Check local DB first
+      const localProduct = await getProduct(db, data);
+      if (localProduct) {
         router.replace(`/add-entry/confirm?productId=${data}`);
-      } else {
-        router.replace(`/add-entry/manual?ean=${data}`);
+        return;
       }
-    } catch {
-      Alert.alert(
-        "Erreur reseau",
-        "Impossible de rechercher le produit. Verifiez votre connexion.",
-        [
-          { text: "Reessayer", onPress: () => setScanned(false) },
-          {
-            text: "Saisie manuelle",
-            onPress: () => router.replace(`/add-entry/manual?ean=${data}`),
-          },
-        ],
-      );
-    }
-  };
+
+      // Fetch from OpenFoodFacts
+      try {
+        const offProduct = await fetchProduct(data);
+        if (offProduct) {
+          await upsertProduct(db, flattenProductForDb(offProduct));
+          router.replace(`/add-entry/confirm?productId=${data}`);
+        } else {
+          router.replace(`/add-entry/manual?ean=${data}`);
+        }
+      } catch {
+        Alert.alert(
+          "Erreur reseau",
+          "Impossible de rechercher le produit. Verifiez votre connexion.",
+          [
+            { text: "Reessayer", onPress: () => setScanned(false) },
+            {
+              text: "Saisie manuelle",
+              onPress: () => router.replace(`/add-entry/manual?ean=${data}`),
+            },
+          ],
+        );
+      }
+    },
+    [db, router, scanned],
+  );
 
   // Permission not yet determined
   if (!permission) {

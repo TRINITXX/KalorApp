@@ -17,6 +17,10 @@ import { v4 as uuidv4 } from "uuid";
 
 import { useThemeColors } from "@/hooks/use-theme-colors";
 import { upsertProduct } from "@/db/queries/products";
+import {
+  NumericField,
+  parseNumericInput,
+} from "@/components/nutrition/numeric-field";
 import type { ProductRow } from "@/types/database";
 
 const schema = z.object({
@@ -32,65 +36,6 @@ const schema = z.object({
 });
 
 type ManualFormValues = z.infer<typeof schema>;
-
-interface NumericFieldProps {
-  label: string;
-  value: string;
-  onChangeText: (text: string) => void;
-  onBlur: () => void;
-  colors: ReturnType<typeof useThemeColors>;
-  error?: string;
-  optional?: boolean;
-}
-
-function NumericField({
-  label,
-  value,
-  onChangeText,
-  onBlur,
-  colors,
-  error,
-  optional,
-}: NumericFieldProps) {
-  return (
-    <View style={{ gap: 4 }}>
-      <Text style={{ fontSize: 13, color: colors.textSecondary }}>
-        {label}
-        {optional ? " (optionnel)" : ""}
-      </Text>
-      <TextInput
-        value={value}
-        onChangeText={onChangeText}
-        onBlur={onBlur}
-        keyboardType="decimal-pad"
-        placeholder="0"
-        placeholderTextColor={colors.textMuted}
-        style={{
-          backgroundColor: colors.card,
-          color: colors.textPrimary,
-          fontSize: 15,
-          paddingHorizontal: 12,
-          paddingVertical: 10,
-          borderRadius: 10,
-          borderCurve: "continuous",
-          borderWidth: 1,
-          borderColor: error ? "#ef4444" : colors.separator,
-          fontVariant: ["tabular-nums"],
-        }}
-      />
-      {error ? (
-        <Text style={{ fontSize: 12, color: "#ef4444" }}>{error}</Text>
-      ) : null}
-    </View>
-  );
-}
-
-function parseNumericInput(text: string): number | null {
-  if (text.trim() === "") return null;
-  const cleaned = text.replace(",", ".");
-  const num = parseFloat(cleaned);
-  return isNaN(num) ? null : num;
-}
 
 export default function ManualScreen() {
   const { ean } = useLocalSearchParams<{ ean?: string }>();
@@ -178,13 +123,15 @@ export default function ManualScreen() {
                   borderRadius: 10,
                   borderCurve: "continuous",
                   borderWidth: 1,
-                  borderColor: errors.name ? "#ef4444" : colors.separator,
+                  borderColor: errors.name
+                    ? colors.accent.error
+                    : colors.separator,
                 }}
               />
             )}
           />
           {errors.name ? (
-            <Text style={{ fontSize: 12, color: "#ef4444" }}>
+            <Text style={{ fontSize: 12, color: colors.accent.error }}>
               {errors.name.message}
             </Text>
           ) : null}

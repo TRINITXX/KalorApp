@@ -1,38 +1,52 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useSQLiteContext } from "expo-sqlite";
 
-import { getEntriesByDate, getDailySummary } from "@/db/queries/entries";
+import { getEntriesByDate } from "@/db/queries/entries";
 import type { EntryRow } from "@/types/database";
 import type { DailySummaryRow } from "@/db/queries/entries";
+
+const EMPTY_SUMMARY: DailySummaryRow = {
+  calories: 0,
+  proteins: 0,
+  carbs: 0,
+  fats: 0,
+  fiber: 0,
+  sugars: 0,
+  saturated_fat: 0,
+  salt: 0,
+};
 
 export function useDailySummary(date: string) {
   const db = useSQLiteContext();
   const [entries, setEntries] = useState<EntryRow[]>([]);
-  const [summary, setSummary] = useState<DailySummaryRow>({
-    calories: 0,
-    proteins: 0,
-    carbs: 0,
-    fats: 0,
-    fiber: 0,
-    sugars: 0,
-    saturated_fat: 0,
-    salt: 0,
-  });
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
-    const [e, s] = await Promise.all([
-      getEntriesByDate(db, date),
-      getDailySummary(db, date),
-    ]);
+    const e = await getEntriesByDate(db, date);
     setEntries(e);
-    setSummary(s);
     setLoading(false);
   }, [db, date]);
 
   useEffect(() => {
     refresh();
   }, [refresh]);
+
+  const summary = useMemo<DailySummaryRow>(() => {
+    if (entries.length === 0) return EMPTY_SUMMARY;
+    return entries.reduce<DailySummaryRow>(
+      (acc, e) => ({
+        calories: acc.calories + e.calories,
+        proteins: acc.proteins + e.proteins,
+        carbs: acc.carbs + e.carbs,
+        fats: acc.fats + e.fats,
+        fiber: acc.fiber + (e.fiber ?? 0),
+        sugars: acc.sugars + (e.sugars ?? 0),
+        saturated_fat: acc.saturated_fat + (e.saturated_fat ?? 0),
+        salt: acc.salt + (e.salt ?? 0),
+      }),
+      { ...EMPTY_SUMMARY },
+    );
+  }, [entries]);
 
   return { entries, summary, loading, refresh };
 }

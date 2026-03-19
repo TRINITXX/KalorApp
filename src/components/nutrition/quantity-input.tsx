@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Text, TextInput, View } from "react-native";
 
 import { useThemeColors } from "@/hooks/use-theme-colors";
@@ -11,6 +11,10 @@ interface QuantityInputProps {
 export function QuantityInput({ value, onChange }: QuantityInputProps) {
   const colors = useThemeColors();
   const [text, setText] = useState(String(value));
+
+  useEffect(() => {
+    setText(String(value));
+  }, [value]);
 
   const handleChangeText = (input: string) => {
     // Allow only digits

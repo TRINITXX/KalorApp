@@ -14,36 +14,14 @@ import { FlashList } from "@shopify/flash-list";
 import * as Haptics from "expo-haptics";
 
 import { useThemeColors } from "@/hooks/use-theme-colors";
-import { useSettingsStore } from "@/stores/settings-store";
 import { getFavorites } from "@/db/queries/favorites";
 import type { FavoriteWithProduct } from "@/db/queries/favorites";
 import { addEntry } from "@/db/queries/entries";
 import { updateLastQuantity } from "@/db/queries/products";
 import { calculateForQuantity, getMealForTime } from "@/lib/nutrition-utils";
-import { MEALS } from "@/constants/meals";
-import type { MealType, NutritionValues } from "@/types/nutrition";
-import type { ProductRow } from "@/types/database";
-
-function productRowToNutrition(product: ProductRow): NutritionValues {
-  return {
-    calories: product.calories,
-    proteins: product.proteins,
-    carbs: product.carbs,
-    fats: product.fats,
-    fiber: product.fiber,
-    sugars: product.sugars,
-    saturated_fat: product.saturated_fat,
-    salt: product.salt,
-  };
-}
-
-function getTodayDate(): string {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, "0");
-  const d = String(now.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
+import { productRowToNutrition, formatDateISO } from "@/lib/product-utils";
+import { MealSelector } from "@/components/nutrition/meal-selector";
+import type { MealType } from "@/types/nutrition";
 
 interface SelectionState {
   selected: boolean;
@@ -54,7 +32,6 @@ export default function QuickAddScreen() {
   const router = useRouter();
   const db = useSQLiteContext();
   const colors = useThemeColors();
-  const enabledMeals = useSettingsStore((s) => s.enabledMeals);
 
   const [favorites, setFavorites] = useState<FavoriteWithProduct[]>([]);
   const [selections, setSelections] = useState<Record<string, SelectionState>>(
@@ -103,8 +80,6 @@ export default function QuickAddScreen() {
     }));
   }, []);
 
-  const visibleMeals = MEALS.filter((m) => enabledMeals[m.type]);
-
   const selectedCount = Object.values(selections).filter(
     (s) => s.selected,
   ).length;
@@ -114,32 +89,34 @@ export default function QuickAddScreen() {
     setIsAdding(true);
 
     try {
-      const today = getTodayDate();
-      for (const fav of favorites) {
-        const sel = selections[fav.id];
-        if (!sel?.selected || sel.quantity <= 0) continue;
+      const today = formatDateISO();
+      await db.withTransactionAsync(async () => {
+        for (const fav of favorites) {
+          const sel = selections[fav.id];
+          if (!sel?.selected || sel.quantity <= 0) continue;
 
-        const per100g = productRowToNutrition(fav);
-        const calculated = calculateForQuantity(per100g, sel.quantity);
+          const per100g = productRowToNutrition(fav);
+          const calculated = calculateForQuantity(per100g, sel.quantity);
 
-        await addEntry(db, {
-          product_id: fav.id,
-          product_name: fav.name,
-          meal: selectedMeal,
-          quantity: sel.quantity,
-          date: today,
-          calories: calculated.calories,
-          proteins: calculated.proteins,
-          carbs: calculated.carbs,
-          fats: calculated.fats,
-          fiber: calculated.fiber,
-          sugars: calculated.sugars,
-          saturated_fat: calculated.saturated_fat,
-          salt: calculated.salt,
-        });
+          await addEntry(db, {
+            product_id: fav.id,
+            product_name: fav.name,
+            meal: selectedMeal,
+            quantity: sel.quantity,
+            date: today,
+            calories: calculated.calories,
+            proteins: calculated.proteins,
+            carbs: calculated.carbs,
+            fats: calculated.fats,
+            fiber: calculated.fiber,
+            sugars: calculated.sugars,
+            saturated_fat: calculated.saturated_fat,
+            salt: calculated.salt,
+          });
 
-        await updateLastQuantity(db, fav.id, sel.quantity);
-      }
+          await updateLastQuantity(db, fav.id, sel.quantity);
+        }
+      });
 
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.dismissAll();
@@ -258,49 +235,7 @@ export default function QuickAddScreen() {
         }}
       >
         {/* Meal selector */}
-        <View style={{ flexDirection: "row", gap: 8 }}>
-          {visibleMeals.map((meal) => {
-            const isSelected = selectedMeal === meal.type;
-            return (
-              <Pressable
-                key={meal.type}
-                onPress={() => setSelectedMeal(meal.type)}
-                style={({ pressed }) => ({
-                  flex: 1,
-                  paddingVertical: 8,
-                  paddingHorizontal: 6,
-                  borderRadius: 10,
-                  borderCurve: "continuous",
-                  borderWidth: 1.5,
-                  borderColor: isSelected
-                    ? colors.accent.calories
-                    : colors.separator,
-                  backgroundColor: isSelected
-                    ? colors.isDark
-                      ? "rgba(74,222,128,0.12)"
-                      : "rgba(22,163,74,0.08)"
-                    : "transparent",
-                  alignItems: "center",
-                  opacity: pressed ? 0.7 : 1,
-                })}
-              >
-                <Text
-                  style={{
-                    fontSize: 12,
-                    fontWeight: isSelected ? "600" : "500",
-                    color: isSelected
-                      ? colors.accent.calories
-                      : colors.textSecondary,
-                    textAlign: "center",
-                  }}
-                  numberOfLines={1}
-                >
-                  {meal.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
+        <MealSelector value={selectedMeal} onChange={setSelectedMeal} />
 
         {/* Confirm button */}
         <Pressable

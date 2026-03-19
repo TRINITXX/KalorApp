@@ -1,47 +1,25 @@
 import { useCallback, useEffect, useState } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSQLiteContext } from "expo-sqlite";
 import { Image, type ImageStyle } from "expo-image";
 import * as Haptics from "expo-haptics";
 
 import { useThemeColors } from "@/hooks/use-theme-colors";
-import { useSettingsStore } from "@/stores/settings-store";
 import { getProduct, updateLastQuantity } from "@/db/queries/products";
 import { addEntry } from "@/db/queries/entries";
 import { calculateForQuantity, getMealForTime } from "@/lib/nutrition-utils";
+import { productRowToNutrition, formatDateISO } from "@/lib/product-utils";
 import { QuantityInput } from "@/components/nutrition/quantity-input";
-import { MEALS } from "@/constants/meals";
+import { MealSelector } from "@/components/nutrition/meal-selector";
 import type { ProductRow } from "@/types/database";
-import type { MealType, NutritionValues } from "@/types/nutrition";
-
-function productRowToNutrition(product: ProductRow): NutritionValues {
-  return {
-    calories: product.calories,
-    proteins: product.proteins,
-    carbs: product.carbs,
-    fats: product.fats,
-    fiber: product.fiber,
-    sugars: product.sugars,
-    saturated_fat: product.saturated_fat,
-    salt: product.salt,
-  };
-}
-
-function getTodayDate(): string {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, "0");
-  const d = String(now.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
+import type { MealType } from "@/types/nutrition";
 
 export default function ConfirmScreen() {
   const { productId } = useLocalSearchParams<{ productId: string }>();
   const router = useRouter();
   const db = useSQLiteContext();
   const colors = useThemeColors();
-  const enabledMeals = useSettingsStore((s) => s.enabledMeals);
 
   const [product, setProduct] = useState<ProductRow | null>(null);
   const [quantity, setQuantity] = useState(100);
@@ -66,30 +44,35 @@ export default function ConfirmScreen() {
     ? calculateForQuantity(productRowToNutrition(product), quantity)
     : null;
 
-  const visibleMeals = MEALS.filter((m) => enabledMeals[m.type]);
-
   const handleAdd = useCallback(async () => {
     if (!product || !calculated) return;
 
-    await addEntry(db, {
-      product_id: product.id,
-      product_name: product.name,
-      meal: selectedMeal,
-      quantity,
-      date: getTodayDate(),
-      calories: calculated.calories,
-      proteins: calculated.proteins,
-      carbs: calculated.carbs,
-      fats: calculated.fats,
-      fiber: calculated.fiber,
-      sugars: calculated.sugars,
-      saturated_fat: calculated.saturated_fat,
-      salt: calculated.salt,
-    });
+    try {
+      await addEntry(db, {
+        product_id: product.id,
+        product_name: product.name,
+        meal: selectedMeal,
+        quantity,
+        date: formatDateISO(),
+        calories: calculated.calories,
+        proteins: calculated.proteins,
+        carbs: calculated.carbs,
+        fats: calculated.fats,
+        fiber: calculated.fiber,
+        sugars: calculated.sugars,
+        saturated_fat: calculated.saturated_fat,
+        salt: calculated.salt,
+      });
 
-    await updateLastQuantity(db, product.id, quantity);
-    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    router.dismissAll();
+      await updateLastQuantity(db, product.id, quantity);
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      router.dismissAll();
+    } catch {
+      Alert.alert(
+        "Erreur",
+        "Impossible d'ajouter l'entree. Veuillez reessayer.",
+      );
+    }
   }, [calculated, db, product, quantity, router, selectedMeal]);
 
   if (!product) {
@@ -224,54 +207,7 @@ export default function ConfirmScreen() {
         >
           Repas
         </Text>
-        <View
-          style={{
-            flexDirection: "row",
-            flexWrap: "wrap",
-            gap: 8,
-          }}
-        >
-          {visibleMeals.map((meal) => {
-            const isSelected = selectedMeal === meal.type;
-            return (
-              <Pressable
-                key={meal.type}
-                onPress={() => setSelectedMeal(meal.type)}
-                style={({ pressed }) => ({
-                  flex: 1,
-                  minWidth: "40%",
-                  paddingVertical: 10,
-                  paddingHorizontal: 12,
-                  borderRadius: 10,
-                  borderCurve: "continuous",
-                  borderWidth: 1.5,
-                  borderColor: isSelected
-                    ? colors.accent.calories
-                    : colors.separator,
-                  backgroundColor: isSelected
-                    ? colors.isDark
-                      ? "rgba(74,222,128,0.12)"
-                      : "rgba(22,163,74,0.08)"
-                    : "transparent",
-                  alignItems: "center",
-                  opacity: pressed ? 0.7 : 1,
-                })}
-              >
-                <Text
-                  style={{
-                    fontSize: 14,
-                    fontWeight: isSelected ? "600" : "500",
-                    color: isSelected
-                      ? colors.accent.calories
-                      : colors.textPrimary,
-                  }}
-                >
-                  {meal.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
+        <MealSelector value={selectedMeal} onChange={setSelectedMeal} wrap />
       </View>
 
       {/* Nutrition preview */}

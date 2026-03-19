@@ -145,7 +145,7 @@ export function MealSection({ meal, entries, onDelete }: MealSectionProps) {
                 style={{
                   fontSize: 16,
                   fontWeight: "600",
-                  color: "#ef4444",
+                  color: colors.accent.error,
                   lineHeight: 18,
                 }}
               >

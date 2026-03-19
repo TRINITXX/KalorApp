@@ -22,6 +22,7 @@ export const COLORS = {
     proteins: { dark: "#60a5fa", light: "#2563eb" },
     carbs: { dark: "#fbbf24", light: "#d97706" },
     fats: { dark: "#f87171", light: "#dc2626" },
+    error: { dark: "#ef4444", light: "#dc2626" },
   },
 } as const;
 

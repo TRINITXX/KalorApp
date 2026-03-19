@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import {
+  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -19,6 +20,7 @@ import { z } from "zod";
 import { useThemeColors } from "@/hooks/use-theme-colors";
 import { getProduct, upsertProduct } from "@/db/queries/products";
 import { isFavorite, addFavorite, removeFavorite } from "@/db/queries/favorites";
+import { NumericField, parseNumericInput } from "@/components/nutrition/numeric-field";
 import type { ProductRow } from "@/types/database";
 
 // ─── Edit form schema ────────────────────────────────────────────────────────
@@ -39,13 +41,6 @@ const editSchema = z.object({
 type EditFormValues = z.infer<typeof editSchema>;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function parseNumericInput(text: string): number | null {
-  if (text.trim() === "") return null;
-  const cleaned = text.replace(",", ".");
-  const num = parseFloat(cleaned);
-  return isNaN(num) ? null : num;
-}
 
 function formatNutrientValue(value: number | null | undefined, unit: string): string {
   if (value == null) return `— ${unit}`;
@@ -85,58 +80,6 @@ function NutrientRow({ label, value, colors, isLast }: NutrientRowProps) {
       >
         {value}
       </Text>
-    </View>
-  );
-}
-
-interface NumericFieldProps {
-  label: string;
-  value: string;
-  onChangeText: (text: string) => void;
-  onBlur: () => void;
-  colors: ReturnType<typeof useThemeColors>;
-  error?: string;
-  optional?: boolean;
-}
-
-function NumericField({
-  label,
-  value,
-  onChangeText,
-  onBlur,
-  colors,
-  error,
-  optional,
-}: NumericFieldProps) {
-  return (
-    <View style={{ gap: 4 }}>
-      <Text style={{ fontSize: 13, color: colors.textSecondary }}>
-        {label}
-        {optional ? " (optionnel)" : ""}
-      </Text>
-      <TextInput
-        value={value}
-        onChangeText={onChangeText}
-        onBlur={onBlur}
-        keyboardType="decimal-pad"
-        placeholder="0"
-        placeholderTextColor={colors.textMuted}
-        style={{
-          backgroundColor: colors.card,
-          color: colors.textPrimary,
-          fontSize: 15,
-          paddingHorizontal: 12,
-          paddingVertical: 10,
-          borderRadius: 10,
-          borderCurve: "continuous",
-          borderWidth: 1,
-          borderColor: error ? "#ef4444" : colors.separator,
-          fontVariant: ["tabular-nums"],
-        }}
-      />
-      {error ? (
-        <Text style={{ fontSize: 12, color: "#ef4444" }}>{error}</Text>
-      ) : null}
     </View>
   );
 }
@@ -210,12 +153,16 @@ export default function ProductDetailScreen() {
 
   const handleToggleFavorite = useCallback(async () => {
     if (!product) return;
-    if (favorite) {
-      await removeFavorite(db, product.id);
-      setFavorite(false);
-    } else {
-      await addFavorite(db, product.id);
-      setFavorite(true);
+    try {
+      if (favorite) {
+        await removeFavorite(db, product.id);
+        setFavorite(false);
+      } else {
+        await addFavorite(db, product.id);
+        setFavorite(true);
+      }
+    } catch {
+      Alert.alert("Erreur", "Impossible de modifier les favoris. Veuillez reessayer.");
     }
   }, [db, favorite, product]);
 
@@ -305,13 +252,15 @@ export default function ProductDetailScreen() {
                     borderRadius: 10,
                     borderCurve: "continuous",
                     borderWidth: 1,
-                    borderColor: errors.name ? "#ef4444" : colors.separator,
+                    borderColor: errors.name
+                      ? colors.accent.error
+                      : colors.separator,
                   }}
                 />
               )}
             />
             {errors.name ? (
-              <Text style={{ fontSize: 12, color: "#ef4444" }}>
+              <Text style={{ fontSize: 12, color: colors.accent.error }}>
                 {errors.name.message}
               </Text>
             ) : null}
@@ -643,13 +592,13 @@ export default function ProductDetailScreen() {
           <SymbolView
             name={favorite ? "heart.fill" : "heart"}
             size={20}
-            tintColor={favorite ? "#ef4444" : colors.textSecondary}
+            tintColor={favorite ? colors.accent.error : colors.textSecondary}
           />
           <Text
             style={{
               fontSize: 15,
               fontWeight: "500",
-              color: favorite ? "#ef4444" : colors.textSecondary,
+              color: favorite ? colors.accent.error : colors.textSecondary,
             }}
           >
             {favorite ? "Retirer des favoris" : "Ajouter aux favoris"}

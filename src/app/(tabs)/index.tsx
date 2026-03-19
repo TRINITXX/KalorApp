@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { useSQLiteContext } from "expo-sqlite";
 import { router } from "expo-router";
@@ -13,15 +13,8 @@ import { deleteEntry } from "@/db/queries/entries";
 import { useDailySummary } from "@/hooks/use-daily-summary";
 import { useThemeColors } from "@/hooks/use-theme-colors";
 import { useSettingsStore } from "@/stores/settings-store";
+import { formatDateISO } from "@/lib/product-utils";
 import type { MealType } from "@/types/nutrition";
-
-function getTodayDate(): string {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, "0");
-  const d = String(now.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
 
 function getFormattedDate(): string {
   const formatted = new Date().toLocaleDateString("fr-FR", {
@@ -38,8 +31,22 @@ export default function DashboardScreen() {
   const goals = useSettingsStore((s) => s.goals);
   const enabledMeals = useSettingsStore((s) => s.enabledMeals);
 
-  const todayDate = getTodayDate();
+  const todayDate = useMemo(() => formatDateISO(), []);
+  const formattedDate = useMemo(() => getFormattedDate(), []);
   const { entries, summary, loading, refresh } = useDailySummary(todayDate);
+
+  const entriesByMeal = useMemo(() => {
+    const grouped: Record<MealType, typeof entries> = {
+      breakfast: [],
+      lunch: [],
+      snack: [],
+      dinner: [],
+    };
+    for (const e of entries) {
+      grouped[e.meal].push(e);
+    }
+    return grouped;
+  }, [entries]);
 
   const handleDelete = useCallback(
     async (id: number) => {
@@ -86,7 +93,7 @@ export default function DashboardScreen() {
             textAlign: "center",
           }}
         >
-          {getFormattedDate()}
+          {formattedDate}
         </Text>
 
         {/* Calorie ring */}
@@ -132,9 +139,7 @@ export default function DashboardScreen() {
           <MealSection
             key={meal.type}
             meal={meal.type}
-            entries={entries.filter(
-              (e) => e.meal === (meal.type as MealType as string),
-            )}
+            entries={entriesByMeal[meal.type]}
             onDelete={handleDelete}
           />
         ))}

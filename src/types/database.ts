@@ -1,9 +1,11 @@
+import type { MealType } from "@/types/nutrition";
+
 export interface ProductRow {
   id: string;
   name: string;
   brand: string | null;
   image_url: string | null;
-  source: string;
+  source: "openfoodfacts" | "manual";
   calories: number;
   proteins: number;
   carbs: number;
@@ -20,7 +22,7 @@ export interface EntryRow {
   id: number;
   product_id: string;
   product_name: string;
-  meal: string;
+  meal: MealType;
   quantity: number;
   date: string;
   calories: number;

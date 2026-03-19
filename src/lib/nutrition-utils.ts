@@ -1,3 +1,4 @@
+import { MEAL_TIME_RANGES } from "@/constants/meals";
 import type { NutritionValues, MealType } from "@/types/nutrition";
 
 export function calculateForQuantity(
@@ -26,16 +27,18 @@ export function formatNumber(value: number, decimals: number = 1): string {
 }
 
 export function getMealForTime(hour: number): MealType {
-  if (hour < 11) return "breakfast";
-  if (hour < 14) return "lunch";
-  if (hour < 17) return "snack";
+  for (const [meal, range] of Object.entries(MEAL_TIME_RANGES)) {
+    if (hour >= range.start && hour < range.end) {
+      return meal as MealType;
+    }
+  }
   return "dinner";
 }
 
 export function exportEntriesCsv(
   entries: {
     date: string;
-    meal: string;
+    meal: MealType;
     product_name: string;
     quantity: number;
     calories: number;

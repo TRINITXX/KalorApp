@@ -505,7 +505,13 @@ function FavoritesSection({ colors }: FavoritesSectionProps) {
               paddingLeft: SPACING.md,
             })}
           >
-            <Text style={{ color: "#ef4444", fontSize: 15, fontWeight: "500" }}>
+            <Text
+              style={{
+                color: colors.accent.error,
+                fontSize: 15,
+                fontWeight: "500",
+              }}
+            >
               Retirer
             </Text>
           </Pressable>
