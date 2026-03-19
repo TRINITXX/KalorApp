@@ -136,7 +136,7 @@ CREATE TABLE products (
 CREATE TABLE entries (
   id              INTEGER PRIMARY KEY AUTOINCREMENT,
   product_id      TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
-  product_name    TEXT NOT NULL,       -- Snapshot for history (survives product deletion)
+  product_name    TEXT NOT NULL,       -- Denormalized for display (avoids JOIN on entry lists)
   meal            TEXT NOT NULL,       -- 'breakfast' | 'lunch' | 'snack' | 'dinner'
   quantity        REAL NOT NULL,       -- grams
   date            TEXT NOT NULL,       -- 'YYYY-MM-DD'
@@ -167,6 +167,8 @@ CREATE INDEX idx_entries_product ON entries(product_id);
 ```
 
 **Note:** No `goals` table. Goals are stored in Zustand (settings-store) persisted via MMKV. They represent daily targets. Weekly comparisons use daily goal x 7.
+
+**Note:** Products are never deleted by the user (no delete UI). The products table acts as a local cache. ON DELETE CASCADE is a safety net only, not a feature path.
 
 ## Data Flow
 
