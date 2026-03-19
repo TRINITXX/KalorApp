@@ -42,6 +42,8 @@
 | `src/db/queries/entries.ts`   | addEntry, deleteEntry, getEntriesByDate, getDailySummary, getWeeklySummary, getWeeklyTotals |
 | `src/db/queries/favorites.ts` | addFavorite, removeFavorite, getFavorites, reorderFavorites, isFavorite                     |
 
+> **Note:** `src/hooks/use-database.ts` from the spec is not needed — `SQLiteProvider` with `onInit` in the root layout handles DB initialization directly.
+
 ### Utilities
 
 | File                         | Responsibility                                                                |
@@ -1131,6 +1133,34 @@ describe("favorites", () => {
     expect(await isFavorite(db, TEST_PRODUCT.id)).toBe(false);
   });
 });
+
+describe("ON DELETE CASCADE", () => {
+  test("deleting product cascades to entries and favorites", async () => {
+    await upsertProduct(db, TEST_PRODUCT);
+    await addEntry(db, {
+      product_id: TEST_PRODUCT.id,
+      product_name: "Nutella",
+      meal: "snack",
+      quantity: 30,
+      date: "2026-03-19",
+      calories: 161.7,
+      proteins: 1.89,
+      carbs: 17.25,
+      fats: 9.27,
+      fiber: 0,
+      sugars: 16.89,
+      saturated_fat: 3.18,
+      salt: 0.032,
+    });
+    await addFavorite(db, TEST_PRODUCT.id);
+    // Delete the product
+    await db.runAsync("DELETE FROM products WHERE id = ?", TEST_PRODUCT.id);
+    // Entries and favorites should be cascade-deleted
+    const entries = await getEntriesByDate(db, "2026-03-19");
+    expect(entries).toHaveLength(0);
+    expect(await isFavorite(db, TEST_PRODUCT.id)).toBe(false);
+  });
+});
 ```
 
 - [ ] **Step 5: Run tests**
@@ -1452,17 +1482,27 @@ export function parseProduct(
   };
 }
 
-async function fetchWithTimeout(url: string): Promise<Response> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
-  try {
-    return await fetch(url, {
-      headers: { "User-Agent": USER_AGENT },
-      signal: controller.signal,
-    });
-  } finally {
-    clearTimeout(timeout);
+async function fetchWithTimeout(
+  url: string,
+  retries: number = 1,
+): Promise<Response> {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
+      try {
+        return await fetch(url, {
+          headers: { "User-Agent": USER_AGENT },
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timeout);
+      }
+    } catch (error) {
+      if (attempt === retries) throw error;
+    }
   }
+  throw new Error("Unreachable");
 }
 
 export async function fetchProduct(
@@ -1768,6 +1808,8 @@ Create `src/components/nutrition/quantity-input.tsx`:
 - Displays: numeric input pre-filled with value, "g" suffix
 - Validated via Zod: positive number, max 5000
 
+> **Style rule:** All components displaying nutritional numbers MUST use `selectable` prop on `<Text>` and `fontVariant: 'tabular-nums'` style. This applies to CalorieRing, MacroBar, MicroChips, MealSection, and QuantityInput.
+
 - [ ] **Step 7: Write component tests**
 
 Create `src/components/__tests__/calorie-ring.test.tsx`:
@@ -1785,6 +1827,26 @@ test('displays consumed and goal', () => {
 test('handles zero goal gracefully', () => {
   const { getByText } = render(<CalorieRing consumed={0} goal={0} />);
   expect(getByText('0')).toBeTruthy();
+});
+```
+
+Create `src/components/__tests__/meal-section.test.tsx`:
+
+```typescript
+import { render, fireEvent } from '@testing-library/react-native';
+import { MealSection } from '../nutrition/meal-section';
+
+const MOCK_ENTRIES = [
+  { id: 1, product_name: 'Nutella', quantity: 30, calories: 161.7, meal: 'snack' },
+];
+
+test('displays meal name and entries', () => {
+  const { getByText } = render(
+    <MealSection meal="snack" entries={MOCK_ENTRIES} onDelete={jest.fn()} />
+  );
+  expect(getByText('Gouter')).toBeTruthy();
+  expect(getByText('Nutella')).toBeTruthy();
+  expect(getByText('30g')).toBeTruthy();
 });
 ```
 
@@ -1918,6 +1980,7 @@ Tapping a recent product navigates to `/add-entry/confirm?productId={id}`.
 - On scan: check local DB → fetch OFF if needed → navigate to confirm
 - Handle: product not found → navigate to manual with EAN pre-filled
 - Handle: network error → show error + manual entry button
+- Handle: camera permission denied → show message with "Open Settings" button (use `Linking.openSettings()`)
 
 - [ ] **Step 4: Implement search screen (add-entry/search.tsx)**
 
