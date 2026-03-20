@@ -4,10 +4,17 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { Image, type ImageStyle } from "expo-image";
 import * as Haptics from "expo-haptics";
 
+import { SymbolView } from "expo-symbols";
+
 import { useDb } from "@/app/_layout";
 import { useThemeColors } from "@/hooks/use-theme-colors";
 import { getProduct, updateLastQuantity } from "@/db/queries/products";
 import { addEntry } from "@/db/queries/entries";
+import {
+  isFavorite,
+  addFavorite,
+  removeFavorite,
+} from "@/db/queries/favorites";
 import { calculateForQuantity, getMealForTime } from "@/lib/nutrition-utils";
 import { productRowToNutrition, formatDateISO } from "@/lib/product-utils";
 import { QuantityInput } from "@/components/nutrition/quantity-input";
@@ -23,6 +30,7 @@ export default function ConfirmScreen() {
 
   const [product, setProduct] = useState<ProductRow | null>(null);
   const [quantity, setQuantity] = useState(100);
+  const [favorite, setFavorite] = useState(false);
   const [selectedMeal, setSelectedMeal] = useState<MealType>(
     getMealForTime(new Date().getHours()),
   );
@@ -31,14 +39,29 @@ export default function ConfirmScreen() {
     if (!productId) return;
 
     const load = async () => {
-      const p = await getProduct(db, productId);
+      const [p, fav] = await Promise.all([
+        getProduct(db, productId),
+        isFavorite(db, productId),
+      ]);
       if (p) {
         setProduct(p);
         setQuantity(p.last_quantity);
+        setFavorite(fav);
       }
     };
     load();
   }, [db, productId]);
+
+  const handleToggleFavorite = useCallback(async () => {
+    if (!product) return;
+    if (favorite) {
+      await removeFavorite(db, product.id);
+      setFavorite(false);
+    } else {
+      await addFavorite(db, product.id);
+      setFavorite(true);
+    }
+  }, [db, favorite, product]);
 
   const calculated = product
     ? calculateForQuantity(productRowToNutrition(product), quantity)
@@ -164,6 +187,17 @@ export default function ConfirmScreen() {
             </Text>
           ) : null}
         </View>
+        <Pressable
+          onPress={handleToggleFavorite}
+          hitSlop={8}
+          style={{ padding: 4 }}
+        >
+          <SymbolView
+            name={favorite ? "heart.fill" : "heart"}
+            size={24}
+            tintColor={favorite ? colors.accent.error : colors.textMuted}
+          />
+        </Pressable>
       </View>
 
       {/* Quantity */}
