@@ -171,8 +171,11 @@ export default function FavoritesScreen() {
                 fontVariant: ["tabular-nums"],
               }}
             >
-              {Math.round(fav.calories)} kcal ·{" "}
-              {fav.favorite_quantity ?? fav.last_quantity}g
+              {Math.round(
+                (fav.calories * (fav.favorite_quantity ?? fav.last_quantity)) /
+                  100,
+              )}{" "}
+              kcal · {fav.favorite_quantity ?? fav.last_quantity}g
             </Text>
           </View>
 
