@@ -54,23 +54,23 @@ export default function FavoritesScreen() {
       contentContainerStyle={{ padding: 16, gap: 8 }}
       contentInsetAdjustmentBehavior="automatic"
     >
-      {/* Action buttons */}
-      <View style={{ gap: 8, marginBottom: 8 }}>
+      {/* Action buttons 3x1 */}
+      <View style={{ flexDirection: "row", gap: 8, marginBottom: 8 }}>
         <ActionButton
           icon="barcode.viewfinder"
-          label="Scanner un produit"
+          label="Scanner"
           onPress={() => router.push("/add-entry/scan")}
           colors={colors}
         />
         <ActionButton
           icon="magnifyingglass"
-          label="Rechercher un produit"
+          label="Rechercher"
           onPress={() => router.push("/add-entry/search")}
           colors={colors}
         />
         <ActionButton
           icon="square.and.pencil"
-          label="Saisie manuelle"
+          label="Manuel"
           onPress={() => router.push("/add-entry/manual")}
           colors={colors}
         />
@@ -208,27 +208,28 @@ function ActionButton({ icon, label, onPress, colors }: ActionButtonProps) {
     <Pressable
       onPress={onPress}
       style={({ pressed }) => ({
-        flexDirection: "row",
+        flex: 1,
         alignItems: "center",
+        justifyContent: "center",
         backgroundColor: colors.card,
         borderRadius: 14,
         borderCurve: "continuous",
-        paddingVertical: 14,
-        paddingHorizontal: 16,
+        paddingVertical: 16,
+        gap: 8,
         opacity: pressed ? 0.7 : 1,
       })}
     >
       <SymbolView
         name={icon as never}
-        size={20}
+        size={24}
         tintColor={colors.accent.calories}
       />
       <Text
         style={{
-          fontSize: 15,
+          fontSize: 13,
           fontWeight: "600",
           color: colors.textPrimary,
-          marginLeft: 12,
+          textAlign: "center",
         }}
       >
         {label}
