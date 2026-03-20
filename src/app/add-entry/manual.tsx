@@ -75,7 +75,7 @@ export default function ManualScreen() {
       };
 
       await upsertProduct(db, product);
-      router.replace(`/add-entry/confirm?productId=${productId}`);
+      router.push(`/add-entry/confirm?productId=${productId}`);
     },
     [db, ean, router],
   );

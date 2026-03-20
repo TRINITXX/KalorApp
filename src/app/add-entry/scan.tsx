@@ -43,7 +43,7 @@ export default function ScanScreen() {
           localProduct.fats > 0);
 
       if (localProduct && hasNutrition) {
-        router.replace(`/add-entry/confirm?productId=${ean}`);
+        router.push(`/add-entry/confirm?productId=${ean}`);
         return;
       }
 
@@ -51,15 +51,15 @@ export default function ScanScreen() {
         const offProduct = await fetchProduct(ean);
         if (offProduct) {
           await upsertProduct(db, flattenProductForDb(offProduct));
-          router.replace(`/add-entry/confirm?productId=${ean}`);
+          router.push(`/add-entry/confirm?productId=${ean}`);
         } else if (localProduct) {
-          router.replace(`/add-entry/confirm?productId=${ean}`);
+          router.push(`/add-entry/confirm?productId=${ean}`);
         } else {
-          router.replace(`/add-entry/manual?ean=${ean}`);
+          router.push(`/add-entry/manual?ean=${ean}`);
         }
       } catch {
         if (localProduct) {
-          router.replace(`/add-entry/confirm?productId=${ean}`);
+          router.push(`/add-entry/confirm?productId=${ean}`);
         } else {
           Alert.alert(
             "Erreur réseau",
@@ -74,7 +74,7 @@ export default function ScanScreen() {
               },
               {
                 text: "Saisie manuelle",
-                onPress: () => router.replace(`/add-entry/manual?ean=${ean}`),
+                onPress: () => router.push(`/add-entry/manual?ean=${ean}`),
               },
               {
                 text: "Annuler",
