@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { Alert, Pressable, ScrollView, Text, View } from "react-native";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { Image, type ImageStyle } from "expo-image";
 import * as Haptics from "expo-haptics";
 
@@ -36,23 +36,24 @@ export default function ConfirmScreen() {
     getMealForTime(new Date().getHours()),
   );
 
-  useEffect(() => {
-    if (!productId) return;
-
-    const load = async () => {
-      const [p, fav, favQty] = await Promise.all([
-        getProduct(db, productId),
-        isFavorite(db, productId),
-        getFavoriteQuantity(db, productId),
-      ]);
-      if (p) {
-        setProduct(p);
-        setQuantity(favQty ?? p.last_quantity);
-        setFavorite(fav);
-      }
-    };
-    load();
-  }, [db, productId]);
+  useFocusEffect(
+    useCallback(() => {
+      if (!productId) return;
+      const load = async () => {
+        const [p, fav, favQty] = await Promise.all([
+          getProduct(db, productId),
+          isFavorite(db, productId),
+          getFavoriteQuantity(db, productId),
+        ]);
+        if (p) {
+          setProduct(p);
+          setQuantity(favQty ?? p.last_quantity);
+          setFavorite(fav);
+        }
+      };
+      load();
+    }, [db, productId]),
+  );
 
   const handleToggleFavorite = useCallback(async () => {
     if (!product) return;
@@ -291,6 +292,31 @@ export default function ConfirmScreen() {
         </View>
       )}
 
+      {/* Edit nutrition button */}
+      <Pressable
+        onPress={() => router.push(`/product/${product.id}`)}
+        style={({ pressed }) => ({
+          backgroundColor: colors.card,
+          paddingVertical: 14,
+          borderRadius: 12,
+          borderCurve: "continuous",
+          alignItems: "center",
+          borderWidth: 1,
+          borderColor: colors.separator,
+          opacity: pressed ? 0.7 : 1,
+        })}
+      >
+        <Text
+          style={{
+            color: colors.textPrimary,
+            fontSize: 16,
+            fontWeight: "500",
+          }}
+        >
+          Modifier les valeurs
+        </Text>
+      </Pressable>
+
       {/* Add button */}
       <Pressable
         onPress={handleAdd}
@@ -300,7 +326,6 @@ export default function ConfirmScreen() {
           borderRadius: 12,
           borderCurve: "continuous",
           alignItems: "center",
-          marginTop: 4,
           opacity: pressed ? 0.7 : 1,
         })}
       >
