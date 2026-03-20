@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import {
   Alert,
   Pressable,
@@ -14,8 +14,6 @@ import { useDb } from "@/app/_layout";
 import { MEALS } from "@/constants/meals";
 import { SPACING } from "@/constants/theme";
 import { getAllEntriesForExport } from "@/db/queries/entries";
-import { getFavorites, removeFavorite } from "@/db/queries/favorites";
-import type { FavoriteWithProduct } from "@/db/queries/favorites";
 import { useThemeColors } from "@/hooks/use-theme-colors";
 import { exportEntriesCsv } from "@/lib/nutrition-utils";
 import { useSettingsStore } from "@/stores/settings-store";
@@ -400,126 +398,6 @@ function ThemeSection({ colors }: ThemeSectionProps) {
   );
 }
 
-// ---------- Favorites section ----------
-
-interface FavoritesSectionProps {
-  colors: ReturnType<typeof useThemeColors>;
-}
-
-function FavoritesSection({ colors }: FavoritesSectionProps) {
-  const db = useDb();
-  const [favorites, setFavorites] = useState<FavoriteWithProduct[]>([]);
-
-  const loadFavorites = useCallback(async () => {
-    const data = await getFavorites(db);
-    setFavorites(data);
-  }, [db]);
-
-  useEffect(() => {
-    void loadFavorites();
-  }, [loadFavorites]);
-
-  const handleRemove = useCallback(
-    async (productId: string, productName: string) => {
-      Alert.alert(
-        "Supprimer le favori",
-        `Retirer "${productName}" de vos favoris ?`,
-        [
-          { text: "Annuler", style: "cancel" },
-          {
-            text: "Supprimer",
-            style: "destructive",
-            onPress: async () => {
-              await removeFavorite(db, productId);
-              await loadFavorites();
-            },
-          },
-        ],
-      );
-    },
-    [db, loadFavorites],
-  );
-
-  if (favorites.length === 0) {
-    return (
-      <SectionCard
-        title="Favoris"
-        backgroundColor={colors.card}
-        titleColor={colors.textSecondary}
-        separatorColor={colors.separator}
-      >
-        <View
-          style={{
-            paddingHorizontal: SPACING.lg,
-            paddingVertical: SPACING.xl,
-            alignItems: "center",
-          }}
-        >
-          <Text style={{ color: colors.textMuted, fontSize: 15 }}>
-            Aucun favori enregistre
-          </Text>
-        </View>
-      </SectionCard>
-    );
-  }
-
-  return (
-    <SectionCard
-      title="Favoris"
-      backgroundColor={colors.card}
-      titleColor={colors.textSecondary}
-      separatorColor={colors.separator}
-    >
-      {favorites.map((fav, i) => (
-        <Row
-          key={fav.id}
-          separatorColor={colors.separator}
-          isLast={i === favorites.length - 1}
-        >
-          <View style={{ flex: 1 }}>
-            <Text
-              style={{ color: colors.textPrimary, fontSize: 16 }}
-              numberOfLines={1}
-            >
-              {fav.name}
-            </Text>
-            {fav.brand ? (
-              <Text
-                style={{
-                  color: colors.textSecondary,
-                  fontSize: 13,
-                  marginTop: 2,
-                }}
-                numberOfLines={1}
-              >
-                {fav.brand}
-              </Text>
-            ) : null}
-          </View>
-          <Pressable
-            onPress={() => void handleRemove(fav.id, fav.name)}
-            hitSlop={12}
-            style={({ pressed }) => ({
-              opacity: pressed ? 0.5 : 1,
-              paddingLeft: SPACING.md,
-            })}
-          >
-            <Text
-              style={{
-                color: colors.accent.error,
-                fontSize: 15,
-                fontWeight: "500",
-              }}
-            >
-              Retirer
-            </Text>
-          </Pressable>
-        </Row>
-      ))}
-    </SectionCard>
-  );
-}
-
 // ---------- Export section ----------
 
 interface ExportSectionProps {
@@ -609,7 +487,6 @@ export default function SettingsScreen() {
       <GoalsSection colors={colors} />
       <MealsSection colors={colors} />
       <ThemeSection colors={colors} />
-      <FavoritesSection colors={colors} />
       <ExportSection colors={colors} />
     </ScrollView>
   );
