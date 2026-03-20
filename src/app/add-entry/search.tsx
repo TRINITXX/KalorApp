@@ -109,7 +109,7 @@ export default function SearchScreen() {
             marginTop: 32,
           }}
         >
-          Aucun resultat
+          Aucun résultat
         </Text>
       )}
 

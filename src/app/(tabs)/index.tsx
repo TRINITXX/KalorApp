@@ -113,7 +113,7 @@ export default function DashboardScreen() {
           }}
         >
           <MacroRing
-            label="Proteines"
+            label="Protéines"
             current={summary.proteins}
             goal={goals.proteins}
             color={colors.accent.proteins}

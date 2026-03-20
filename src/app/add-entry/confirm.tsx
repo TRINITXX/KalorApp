@@ -95,7 +95,7 @@ export default function ConfirmScreen() {
     } catch {
       Alert.alert(
         "Erreur",
-        "Impossible d'ajouter l'entree. Veuillez reessayer.",
+        "Impossible d'ajouter l'entrée. Veuillez réessayer.",
       );
     }
   }, [calculated, db, product, quantity, router, selectedMeal]);
@@ -219,7 +219,7 @@ export default function ConfirmScreen() {
             marginBottom: 12,
           }}
         >
-          Quantite
+          Quantité
         </Text>
         <QuantityInput value={quantity} onChange={setQuantity} />
       </View>
@@ -273,7 +273,7 @@ export default function ConfirmScreen() {
               color={colors.accent.calories}
             />
             <NutritionRow
-              label="Proteines"
+              label="Protéines"
               value={`${calculated.proteins.toFixed(1)} g`}
               color={colors.accent.proteins}
             />

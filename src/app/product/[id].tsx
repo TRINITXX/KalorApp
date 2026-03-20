@@ -178,7 +178,7 @@ export default function ProductDetailScreen() {
         setFavorite(true);
       }
     } catch {
-      Alert.alert("Erreur", "Impossible de modifier les favoris. Veuillez reessayer.");
+      Alert.alert("Erreur", "Impossible de modifier les favoris. Veuillez réessayer.");
     }
   }, [db, favorite, product]);
 
@@ -440,7 +440,7 @@ export default function ProductDetailScreen() {
             name="saturated_fat"
             render={({ field: { onChange, onBlur, value } }) => (
               <NumericField
-                label="Graisses saturees (g)"
+                label="Graisses saturées (g)"
                 value={value == null ? "" : String(value)}
                 onChangeText={(text) => {
                   onChange(parseNumericInput(text));
@@ -642,7 +642,7 @@ export default function ProductDetailScreen() {
               color: colors.textSecondary,
             }}
           >
-            Quantite favori
+            Quantité favori
           </Text>
           <QuantityInput
             value={favQuantity}
@@ -723,7 +723,7 @@ export default function ProductDetailScreen() {
           colors={colors}
         />
         <NutrientRow
-          label="Proteines"
+          label="Protéines"
           value={`${formatNutrient(product.proteins, showPer100g, favQuantity)} g`}
           colors={colors}
         />
@@ -748,7 +748,7 @@ export default function ProductDetailScreen() {
           colors={colors}
         />
         <NutrientRow
-          label="Graisses saturees"
+          label="Graisses saturées"
           value={formatNutrientValue(product.saturated_fat != null ? (showPer100g ? product.saturated_fat : product.saturated_fat * favQuantity / 100) : null, "g")}
           colors={colors}
         />
@@ -800,7 +800,7 @@ export default function ProductDetailScreen() {
         })}
       >
         <Text style={{ color: "#fff", fontSize: 16, fontWeight: "600" }}>
-          Ajouter une entree
+          Ajouter une entrée
         </Text>
       </Pressable>
     </ScrollView>

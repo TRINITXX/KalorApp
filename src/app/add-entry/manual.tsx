@@ -255,7 +255,7 @@ export default function ManualScreen() {
         name="saturated_fat"
         render={({ field: { onChange, onBlur, value } }) => (
           <NumericField
-            label="Graisses saturees (g)"
+            label="Graisses saturées (g)"
             value={value == null ? "" : String(value)}
             onChangeText={(text) => {
               const num = parseNumericInput(text);

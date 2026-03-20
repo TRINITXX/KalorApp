@@ -364,7 +364,7 @@ function WeekView() {
           }}
         >
           <MacroRing
-            label="Proteines"
+            label="Protéines"
             current={weekTotals.proteins}
             goal={goals.proteins != null ? goals.proteins * 7 : null}
             color={colors.accent.proteins}
@@ -460,7 +460,7 @@ function WeekView() {
             marginBottom: 4,
           }}
         >
-          Detail par jour
+          Détail par jour
         </Text>
 
         {weekData.map((day, i) => {
@@ -791,7 +791,7 @@ function TrendsView() {
             }}
           >
             <Text style={{ fontSize: 14, color: colors.textMuted }}>
-              Pas encore de donnees
+              Pas encore de données
             </Text>
           </View>
         ) : (
@@ -826,7 +826,7 @@ function TrendsView() {
               marginBottom: 4,
             }}
           >
-            Detail par semaine
+            Détail par semaine
           </Text>
           {sortedSummaries.map((s, i) => (
             <View

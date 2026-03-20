@@ -65,10 +65,10 @@ export default function ScanScreen() {
           router.replace(`/add-entry/confirm?productId=${data}`);
         } else {
           Alert.alert(
-            "Erreur reseau",
-            "Impossible de rechercher le produit. Verifiez votre connexion.",
+            "Erreur réseau",
+            "Impossible de rechercher le produit. Vérifiez votre connexion.",
             [
-              { text: "Reessayer", onPress: () => setScanned(false) },
+              { text: "Réessayer", onPress: () => setScanned(false) },
               {
                 text: "Saisie manuelle",
                 onPress: () => router.replace(`/add-entry/manual?ean=${data}`),
@@ -103,8 +103,8 @@ export default function ScanScreen() {
           ]}
         >
           {permission.canAskAgain
-            ? "L'acces a la camera est necessaire pour scanner les codes-barres."
-            : "L'acces a la camera a ete refuse. Ouvrez les reglages pour l'autoriser."}
+            ? "L'accès à la caméra est nécessaire pour scanner les codes-barres."
+            : "L'accès à la caméra a été refusé. Ouvrez les réglages pour l'autoriser."}
         </Text>
         {permission.canAskAgain ? (
           <Pressable

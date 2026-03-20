@@ -46,7 +46,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="settings"
         options={{
-          title: "Reglages",
+          title: "Réglages",
           tabBarIcon: ({ color }) => (
             <SymbolView name="gearshape" tintColor={color} size={24} />
           ),

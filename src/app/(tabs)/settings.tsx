@@ -105,7 +105,7 @@ function Row({ separatorColor, isLast, children }: RowProps) {
 
 const MAIN_GOALS: { key: keyof Goals; label: string; unit: string }[] = [
   { key: "calories", label: "Calories", unit: "kcal" },
-  { key: "proteins", label: "Proteines", unit: "g" },
+  { key: "proteins", label: "Protéines", unit: "g" },
   { key: "carbs", label: "Glucides", unit: "g" },
   { key: "fats", label: "Lipides", unit: "g" },
 ];
@@ -113,7 +113,7 @@ const MAIN_GOALS: { key: keyof Goals; label: string; unit: string }[] = [
 const OPTIONAL_GOALS: { key: keyof Goals; label: string; unit: string }[] = [
   { key: "fiber", label: "Fibres", unit: "g" },
   { key: "sugars", label: "Sucres", unit: "g" },
-  { key: "saturated_fat", label: "Acides gras satures", unit: "g" },
+  { key: "saturated_fat", label: "Acides gras saturés", unit: "g" },
   { key: "salt", label: "Sel", unit: "g" },
 ];
 
@@ -375,7 +375,7 @@ function ThemeSection({ colors }: ThemeSectionProps) {
 
   return (
     <SectionCard
-      title="Theme"
+      title="Thème"
       backgroundColor={colors.card}
       titleColor={colors.textSecondary}
       separatorColor={colors.separator}
@@ -414,7 +414,7 @@ function ExportSection({ colors }: ExportSectionProps) {
     try {
       const entries = await getAllEntriesForExport(db);
       if (entries.length === 0) {
-        Alert.alert("Aucune donnee", "Aucune entree a exporter.");
+        Alert.alert("Aucune donnée", "Aucune entrée à exporter.");
         return;
       }
       const csv = exportEntriesCsv(entries);
@@ -442,7 +442,7 @@ function ExportSection({ colors }: ExportSectionProps) {
 
   return (
     <SectionCard
-      title="Donnees"
+      title="Données"
       backgroundColor={colors.card}
       titleColor={colors.textSecondary}
       separatorColor={colors.separator}
