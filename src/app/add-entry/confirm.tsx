@@ -131,24 +131,58 @@ export default function ConfirmScreen() {
     : null;
 
   const handleAdd = useCallback(async () => {
-    if (!product || !calculated) return;
+    if (!product) return;
+
+    // Auto-save edits if still in editing mode
+    let currentProduct = product;
+    if (editing) {
+      const parse = (v: string) => {
+        const n = parseFloat(v.replace(",", "."));
+        return isNaN(n) ? 0 : n;
+      };
+      const parseOpt = (v: string) => {
+        if (v.trim() === "") return null;
+        const n = parseFloat(v.replace(",", "."));
+        return isNaN(n) ? null : n;
+      };
+      currentProduct = {
+        ...product,
+        calories: parse(editValues.calories),
+        proteins: parse(editValues.proteins),
+        carbs: parse(editValues.carbs),
+        fats: parse(editValues.fats),
+        fiber: parseOpt(editValues.fiber),
+        sugars: parseOpt(editValues.sugars),
+        saturated_fat: parseOpt(editValues.saturated_fat),
+        salt: parseOpt(editValues.salt),
+      };
+      await upsertProduct(db, currentProduct);
+      setProduct(currentProduct);
+      setEditing(false);
+    }
+
+    const calc = calculateForQuantity(
+      productRowToNutrition(currentProduct),
+      quantity,
+    );
+
     try {
       await addEntry(db, {
-        product_id: product.id,
-        product_name: product.name,
+        product_id: currentProduct.id,
+        product_name: currentProduct.name,
         meal: selectedMeal,
         quantity,
         date: formatDateISO(),
-        calories: calculated.calories,
-        proteins: calculated.proteins,
-        carbs: calculated.carbs,
-        fats: calculated.fats,
-        fiber: calculated.fiber,
-        sugars: calculated.sugars,
-        saturated_fat: calculated.saturated_fat,
-        salt: calculated.salt,
+        calories: calc.calories,
+        proteins: calc.proteins,
+        carbs: calc.carbs,
+        fats: calc.fats,
+        fiber: calc.fiber,
+        sugars: calc.sugars,
+        saturated_fat: calc.saturated_fat,
+        salt: calc.salt,
       });
-      await updateLastQuantity(db, product.id, quantity);
+      await updateLastQuantity(db, currentProduct.id, quantity);
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.back();
     } catch {
@@ -157,7 +191,7 @@ export default function ConfirmScreen() {
         "Impossible d'ajouter l'entrée. Veuillez réessayer.",
       );
     }
-  }, [calculated, db, product, quantity, router, selectedMeal]);
+  }, [db, editing, editValues, product, quantity, router, selectedMeal]);
 
   if (!product) {
     return (
