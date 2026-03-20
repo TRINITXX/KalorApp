@@ -164,6 +164,33 @@ export default function AddEntryScreen() {
   if (step === "recap") {
     return (
       <View style={{ flex: 1, backgroundColor: colors.background }}>
+        {/* Back bar */}
+        <Pressable
+          onPress={() => setStep("select")}
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            paddingHorizontal: 12,
+            paddingVertical: 10,
+            gap: 4,
+          }}
+        >
+          <SymbolView
+            name="chevron.left"
+            size={18}
+            tintColor={colors.accent.calories}
+          />
+          <Text
+            style={{
+              fontSize: 16,
+              color: colors.accent.calories,
+              fontWeight: "500",
+            }}
+          >
+            Retour
+          </Text>
+        </Pressable>
+
         <ScrollView
           contentContainerStyle={{ padding: 16, gap: 10, paddingBottom: 160 }}
         >
