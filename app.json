@@ -14,7 +14,13 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.kalorapp.app"
+      "bundleIdentifier": "com.kalorapp.app",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      },
+      "entitlements": {
+        "com.apple.security.application-groups": ["group.com.kalorapp.app"]
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -37,10 +43,19 @@
       ],
       "expo-sqlite",
       "expo-image",
-      "expo-sharing"
+      "expo-sharing",
+      "@bacons/apple-targets"
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {
+        "root": "./src/app"
+      },
+      "eas": {
+        "projectId": "0342d525-6026-4429-bb49-c677043f1f19"
+      }
     }
   }
 }
