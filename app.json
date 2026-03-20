@@ -15,7 +15,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.kalorapp.app",
-      "appleTeamId": "DFX4LTG7H6",
+      "appleTeamId": "YOUR_TEAM_ID",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       },
@@ -55,7 +55,7 @@
         "root": "./src/app"
       },
       "eas": {
-        "projectId": "0342d525-6026-4429-bb49-c677043f1f19"
+        "projectId": "YOUR_PROJECT_ID"
       }
     }
   }
