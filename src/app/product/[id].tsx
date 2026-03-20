@@ -19,8 +19,15 @@ import { z } from "zod";
 import { useDb } from "@/app/_layout";
 import { useThemeColors } from "@/hooks/use-theme-colors";
 import { getProduct, upsertProduct } from "@/db/queries/products";
-import { isFavorite, addFavorite, removeFavorite } from "@/db/queries/favorites";
+import {
+  isFavorite,
+  addFavorite,
+  removeFavorite,
+  getFavoriteQuantity,
+  updateFavoriteQuantity,
+} from "@/db/queries/favorites";
 import { NumericField, parseNumericInput } from "@/components/nutrition/numeric-field";
+import { QuantityInput } from "@/components/nutrition/quantity-input";
 import type { ProductRow } from "@/types/database";
 
 // ─── Edit form schema ────────────────────────────────────────────────────────
@@ -45,6 +52,11 @@ type EditFormValues = z.infer<typeof editSchema>;
 function formatNutrientValue(value: number | null | undefined, unit: string): string {
   if (value == null) return `— ${unit}`;
   return `${value % 1 === 0 ? value.toFixed(0) : value.toFixed(1)} ${unit}`;
+}
+
+function formatNutrient(per100g: number, showPer100g: boolean, quantity: number): string {
+  const value = showPer100g ? per100g : per100g * quantity / 100;
+  return value % 1 === 0 ? value.toFixed(0) : value.toFixed(1);
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -94,6 +106,8 @@ export default function ProductDetailScreen() {
 
   const [product, setProduct] = useState<ProductRow | null>(null);
   const [favorite, setFavorite] = useState(false);
+  const [favQuantity, setFavQuantity] = useState(100);
+  const [showPer100g, setShowPer100g] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -122,13 +136,15 @@ export default function ProductDetailScreen() {
   useEffect(() => {
     if (!id) return;
     const load = async () => {
-      const [p, fav] = await Promise.all([
+      const [p, fav, favQty] = await Promise.all([
         getProduct(db, id),
         isFavorite(db, id),
+        getFavoriteQuantity(db, id),
       ]);
       if (p) {
         setProduct(p);
         setFavorite(fav);
+        setFavQuantity(favQty ?? p.last_quantity);
       }
     };
     load();
@@ -606,7 +622,38 @@ export default function ProductDetailScreen() {
         </Pressable>
       </View>
 
-      {/* Nutritional table */}
+      {/* Quantity + nutritional table */}
+      {favorite && (
+        <View
+          style={{
+            backgroundColor: colors.card,
+            borderRadius: 16,
+            borderCurve: "continuous",
+            padding: 16,
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
+        >
+          <Text
+            style={{
+              fontSize: 15,
+              fontWeight: "500",
+              color: colors.textSecondary,
+            }}
+          >
+            Quantite favori
+          </Text>
+          <QuantityInput
+            value={favQuantity}
+            onChange={(v) => {
+              setFavQuantity(v);
+              updateFavoriteQuantity(db, product.id, v);
+            }}
+          />
+        </View>
+      )}
+
       <View
         style={{
           backgroundColor: colors.card,
@@ -616,58 +663,98 @@ export default function ProductDetailScreen() {
           overflow: "hidden",
         }}
       >
-        <Text
+        {/* Toggle 100g / quantity */}
+        <View
           style={{
-            fontSize: 13,
-            fontWeight: "600",
-            color: colors.textMuted,
-            textTransform: "uppercase",
-            letterSpacing: 0.5,
+            flexDirection: "row",
+            justifyContent: "center",
+            gap: 0,
             paddingTop: 14,
-            paddingBottom: 4,
+            paddingBottom: 8,
           }}
         >
-          Pour 100g
-        </Text>
+          <Pressable
+            onPress={() => setShowPer100g(true)}
+            style={{
+              paddingVertical: 6,
+              paddingHorizontal: 16,
+              borderRadius: 8,
+              backgroundColor: showPer100g
+                ? colors.accent.calories
+                : "transparent",
+            }}
+          >
+            <Text
+              style={{
+                fontSize: 13,
+                fontWeight: showPer100g ? "600" : "400",
+                color: showPer100g ? "#fff" : colors.textMuted,
+              }}
+            >
+              100g
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={() => setShowPer100g(false)}
+            style={{
+              paddingVertical: 6,
+              paddingHorizontal: 16,
+              borderRadius: 8,
+              backgroundColor: !showPer100g
+                ? colors.accent.calories
+                : "transparent",
+            }}
+          >
+            <Text
+              style={{
+                fontSize: 13,
+                fontWeight: !showPer100g ? "600" : "400",
+                color: !showPer100g ? "#fff" : colors.textMuted,
+              }}
+            >
+              {favQuantity}g
+            </Text>
+          </Pressable>
+        </View>
 
         <NutrientRow
           label="Calories"
-          value={`${product.calories % 1 === 0 ? product.calories.toFixed(0) : product.calories.toFixed(1)} kcal`}
+          value={`${formatNutrient(product.calories, showPer100g, favQuantity)} kcal`}
           colors={colors}
         />
         <NutrientRow
           label="Proteines"
-          value={`${product.proteins % 1 === 0 ? product.proteins.toFixed(0) : product.proteins.toFixed(1)} g`}
+          value={`${formatNutrient(product.proteins, showPer100g, favQuantity)} g`}
           colors={colors}
         />
         <NutrientRow
           label="Glucides"
-          value={`${product.carbs % 1 === 0 ? product.carbs.toFixed(0) : product.carbs.toFixed(1)} g`}
+          value={`${formatNutrient(product.carbs, showPer100g, favQuantity)} g`}
           colors={colors}
         />
         <NutrientRow
           label="Lipides"
-          value={`${product.fats % 1 === 0 ? product.fats.toFixed(0) : product.fats.toFixed(1)} g`}
+          value={`${formatNutrient(product.fats, showPer100g, favQuantity)} g`}
           colors={colors}
         />
         <NutrientRow
           label="Fibres"
-          value={formatNutrientValue(product.fiber, "g")}
+          value={formatNutrientValue(product.fiber != null ? (showPer100g ? product.fiber : product.fiber * favQuantity / 100) : null, "g")}
           colors={colors}
         />
         <NutrientRow
           label="Sucres"
-          value={formatNutrientValue(product.sugars, "g")}
+          value={formatNutrientValue(product.sugars != null ? (showPer100g ? product.sugars : product.sugars * favQuantity / 100) : null, "g")}
           colors={colors}
         />
         <NutrientRow
           label="Graisses saturees"
-          value={formatNutrientValue(product.saturated_fat, "g")}
+          value={formatNutrientValue(product.saturated_fat != null ? (showPer100g ? product.saturated_fat : product.saturated_fat * favQuantity / 100) : null, "g")}
           colors={colors}
         />
         <NutrientRow
           label="Sel"
-          value={formatNutrientValue(product.salt, "g")}
+          value={formatNutrientValue(product.salt != null ? (showPer100g ? product.salt : product.salt * favQuantity / 100) : null, "g")}
           colors={colors}
           isLast
         />
