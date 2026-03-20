@@ -9,10 +9,10 @@ import {
   Platform,
 } from "react-native";
 import { useRouter } from "expo-router";
-import { useSQLiteContext } from "expo-sqlite";
 import { FlashList } from "@shopify/flash-list";
 import * as Haptics from "expo-haptics";
 
+import { useDb } from "@/app/_layout";
 import { useThemeColors } from "@/hooks/use-theme-colors";
 import { getFavorites } from "@/db/queries/favorites";
 import type { FavoriteWithProduct } from "@/db/queries/favorites";
@@ -30,7 +30,7 @@ interface SelectionState {
 
 export default function QuickAddScreen() {
   const router = useRouter();
-  const db = useSQLiteContext();
+  const db = useDb();
   const colors = useThemeColors();
 
   const [favorites, setFavorites] = useState<FavoriteWithProduct[]>([]);

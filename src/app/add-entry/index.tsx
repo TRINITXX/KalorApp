@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { useRouter } from "expo-router";
-import { useSQLiteContext } from "expo-sqlite";
 import { SymbolView } from "expo-symbols";
 
+import { useDb } from "@/app/_layout";
 import { useThemeColors } from "@/hooks/use-theme-colors";
 import { getRecentProducts } from "@/db/queries/products";
 import { ProductRow } from "@/components/nutrition/product-row";
@@ -52,7 +52,7 @@ function ActionButton({ icon, label, onPress, colors }: ActionButtonProps) {
 
 export default function AddEntryScreen() {
   const router = useRouter();
-  const db = useSQLiteContext();
+  const db = useDb();
   const colors = useThemeColors();
   const [recentProducts, setRecentProducts] = useState<ProductRowType[]>([]);
 

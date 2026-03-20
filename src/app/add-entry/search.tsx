@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, Text, TextInput, View } from "react-native";
 import { useRouter } from "expo-router";
-import { useSQLiteContext } from "expo-sqlite";
 import { FlashList } from "@shopify/flash-list";
 
+import { useDb } from "@/app/_layout";
 import { useThemeColors } from "@/hooks/use-theme-colors";
 import { useDebounce } from "@/hooks/use-debounce";
 import { searchProducts, fetchProduct } from "@/lib/open-food-facts";
@@ -14,7 +14,7 @@ import { flattenProductForDb } from "@/lib/product-utils";
 
 export default function SearchScreen() {
   const router = useRouter();
-  const db = useSQLiteContext();
+  const db = useDb();
   const colors = useThemeColors();
   const [query, setQuery] = useState("");
   const debouncedQuery = useDebounce(query, 300);
@@ -121,6 +121,7 @@ export default function SearchScreen() {
             name={item.name}
             brand={item.brand}
             imageUrl={item.image_url}
+            calories={item.calories ?? undefined}
             onPress={() => handleSelect(item)}
           />
         )}

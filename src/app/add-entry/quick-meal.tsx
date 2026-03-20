@@ -10,9 +10,9 @@ import {
 import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { Image } from "expo-image";
-import { useSQLiteContext } from "expo-sqlite";
 import { SymbolView } from "expo-symbols";
 
+import { useDb } from "@/app/_layout";
 import { QuantityInput } from "@/components/nutrition/quantity-input";
 import { getFavorites } from "@/db/queries/favorites";
 import { addEntry } from "@/db/queries/entries";
@@ -31,7 +31,7 @@ interface SelectedItem {
 
 export default function QuickMealScreen() {
   const router = useRouter();
-  const db = useSQLiteContext();
+  const db = useDb();
   const colors = useThemeColors();
 
   const [step, setStep] = useState<Step>("select");

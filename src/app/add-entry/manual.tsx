@@ -1,20 +1,12 @@
 import { useCallback } from "react";
-import {
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  Text,
-  TextInput,
-  View,
-  Pressable,
-} from "react-native";
+import { ScrollView, Text, TextInput, View, Pressable } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useSQLiteContext } from "expo-sqlite";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { v4 as uuidv4 } from "uuid";
 
+import { useDb } from "@/app/_layout";
 import { useThemeColors } from "@/hooks/use-theme-colors";
 import { upsertProduct } from "@/db/queries/products";
 import {
@@ -40,7 +32,7 @@ type ManualFormValues = z.infer<typeof schema>;
 export default function ManualScreen() {
   const { ean } = useLocalSearchParams<{ ean?: string }>();
   const router = useRouter();
-  const db = useSQLiteContext();
+  const db = useDb();
   const colors = useThemeColors();
 
   const {
@@ -89,234 +81,230 @@ export default function ManualScreen() {
   );
 
   return (
-    <KeyboardAvoidingView
+    <ScrollView
       style={{ flex: 1, backgroundColor: colors.background }}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-      keyboardVerticalOffset={100}
+      contentContainerStyle={{ padding: 16, gap: 16 }}
+      keyboardShouldPersistTaps="handled"
+      automaticallyAdjustKeyboardInsets
     >
-      <ScrollView
-        contentContainerStyle={{ padding: 16, gap: 16 }}
-        keyboardShouldPersistTaps="handled"
-      >
-        {/* Name field */}
-        <View style={{ gap: 4 }}>
-          <Text style={{ fontSize: 13, color: colors.textSecondary }}>
-            Nom du produit
-          </Text>
-          <Controller
-            control={control}
-            name="name"
-            render={({ field: { onChange, onBlur, value } }) => (
-              <TextInput
-                value={value}
-                onChangeText={onChange}
-                onBlur={onBlur}
-                placeholder="Ex: Yaourt nature"
-                placeholderTextColor={colors.textMuted}
-                autoFocus
-                style={{
-                  backgroundColor: colors.card,
-                  color: colors.textPrimary,
-                  fontSize: 15,
-                  paddingHorizontal: 12,
-                  paddingVertical: 10,
-                  borderRadius: 10,
-                  borderCurve: "continuous",
-                  borderWidth: 1,
-                  borderColor: errors.name
-                    ? colors.accent.error
-                    : colors.separator,
-                }}
-              />
-            )}
-          />
-          {errors.name ? (
-            <Text style={{ fontSize: 12, color: colors.accent.error }}>
-              {errors.name.message}
-            </Text>
-          ) : null}
-        </View>
-
-        {/* Nutrition header */}
-        <Text
-          style={{
-            fontSize: 15,
-            fontWeight: "600",
-            color: colors.textSecondary,
-            marginTop: 4,
-          }}
-        >
-          Valeurs nutritionnelles (pour 100g)
+      {/* Name field */}
+      <View style={{ gap: 4 }}>
+        <Text style={{ fontSize: 13, color: colors.textSecondary }}>
+          Nom du produit
         </Text>
-
-        {/* Required nutrition fields */}
         <Controller
           control={control}
-          name="calories"
+          name="name"
           render={({ field: { onChange, onBlur, value } }) => (
-            <NumericField
-              label="Calories (kcal)"
-              value={value === 0 ? "" : String(value)}
-              onChangeText={(text) => {
-                const num = parseNumericInput(text);
-                onChange(num ?? 0);
-              }}
+            <TextInput
+              value={value}
+              onChangeText={onChange}
               onBlur={onBlur}
-              colors={colors}
-              error={errors.calories?.message}
+              placeholder="Ex: Yaourt nature"
+              placeholderTextColor={colors.textMuted}
+              autoFocus
+              style={{
+                backgroundColor: colors.card,
+                color: colors.textPrimary,
+                fontSize: 15,
+                paddingHorizontal: 12,
+                paddingVertical: 10,
+                borderRadius: 10,
+                borderCurve: "continuous",
+                borderWidth: 1,
+                borderColor: errors.name
+                  ? colors.accent.error
+                  : colors.separator,
+              }}
             />
           )}
         />
-
-        <Controller
-          control={control}
-          name="proteins"
-          render={({ field: { onChange, onBlur, value } }) => (
-            <NumericField
-              label="Proteines (g)"
-              value={value === 0 ? "" : String(value)}
-              onChangeText={(text) => {
-                const num = parseNumericInput(text);
-                onChange(num ?? 0);
-              }}
-              onBlur={onBlur}
-              colors={colors}
-              error={errors.proteins?.message}
-            />
-          )}
-        />
-
-        <Controller
-          control={control}
-          name="carbs"
-          render={({ field: { onChange, onBlur, value } }) => (
-            <NumericField
-              label="Glucides (g)"
-              value={value === 0 ? "" : String(value)}
-              onChangeText={(text) => {
-                const num = parseNumericInput(text);
-                onChange(num ?? 0);
-              }}
-              onBlur={onBlur}
-              colors={colors}
-              error={errors.carbs?.message}
-            />
-          )}
-        />
-
-        <Controller
-          control={control}
-          name="fats"
-          render={({ field: { onChange, onBlur, value } }) => (
-            <NumericField
-              label="Lipides (g)"
-              value={value === 0 ? "" : String(value)}
-              onChangeText={(text) => {
-                const num = parseNumericInput(text);
-                onChange(num ?? 0);
-              }}
-              onBlur={onBlur}
-              colors={colors}
-              error={errors.fats?.message}
-            />
-          )}
-        />
-
-        {/* Optional nutrition fields */}
-        <Controller
-          control={control}
-          name="fiber"
-          render={({ field: { onChange, onBlur, value } }) => (
-            <NumericField
-              label="Fibres (g)"
-              value={value == null ? "" : String(value)}
-              onChangeText={(text) => {
-                const num = parseNumericInput(text);
-                onChange(num);
-              }}
-              onBlur={onBlur}
-              colors={colors}
-              optional
-              error={errors.fiber?.message}
-            />
-          )}
-        />
-
-        <Controller
-          control={control}
-          name="sugars"
-          render={({ field: { onChange, onBlur, value } }) => (
-            <NumericField
-              label="Sucres (g)"
-              value={value == null ? "" : String(value)}
-              onChangeText={(text) => {
-                const num = parseNumericInput(text);
-                onChange(num);
-              }}
-              onBlur={onBlur}
-              colors={colors}
-              optional
-              error={errors.sugars?.message}
-            />
-          )}
-        />
-
-        <Controller
-          control={control}
-          name="saturated_fat"
-          render={({ field: { onChange, onBlur, value } }) => (
-            <NumericField
-              label="Graisses saturees (g)"
-              value={value == null ? "" : String(value)}
-              onChangeText={(text) => {
-                const num = parseNumericInput(text);
-                onChange(num);
-              }}
-              onBlur={onBlur}
-              colors={colors}
-              optional
-              error={errors.saturated_fat?.message}
-            />
-          )}
-        />
-
-        <Controller
-          control={control}
-          name="salt"
-          render={({ field: { onChange, onBlur, value } }) => (
-            <NumericField
-              label="Sel (g)"
-              value={value == null ? "" : String(value)}
-              onChangeText={(text) => {
-                const num = parseNumericInput(text);
-                onChange(num);
-              }}
-              onBlur={onBlur}
-              colors={colors}
-              optional
-              error={errors.salt?.message}
-            />
-          )}
-        />
-
-        {/* Submit */}
-        <Pressable
-          onPress={handleSubmit(onSubmit)}
-          style={({ pressed }) => ({
-            backgroundColor: colors.accent.calories,
-            paddingVertical: 14,
-            borderRadius: 12,
-            borderCurve: "continuous",
-            alignItems: "center",
-            marginTop: 8,
-            opacity: pressed ? 0.7 : 1,
-          })}
-        >
-          <Text style={{ color: "#fff", fontSize: 16, fontWeight: "600" }}>
-            Valider
+        {errors.name ? (
+          <Text style={{ fontSize: 12, color: colors.accent.error }}>
+            {errors.name.message}
           </Text>
-        </Pressable>
-      </ScrollView>
-    </KeyboardAvoidingView>
+        ) : null}
+      </View>
+
+      {/* Nutrition header */}
+      <Text
+        style={{
+          fontSize: 15,
+          fontWeight: "600",
+          color: colors.textSecondary,
+          marginTop: 4,
+        }}
+      >
+        Valeurs nutritionnelles (pour 100g)
+      </Text>
+
+      {/* Required nutrition fields */}
+      <Controller
+        control={control}
+        name="calories"
+        render={({ field: { onChange, onBlur, value } }) => (
+          <NumericField
+            label="Calories (kcal)"
+            value={value === 0 ? "" : String(value)}
+            onChangeText={(text) => {
+              const num = parseNumericInput(text);
+              onChange(num ?? 0);
+            }}
+            onBlur={onBlur}
+            colors={colors}
+            error={errors.calories?.message}
+          />
+        )}
+      />
+
+      <Controller
+        control={control}
+        name="proteins"
+        render={({ field: { onChange, onBlur, value } }) => (
+          <NumericField
+            label="Proteines (g)"
+            value={value === 0 ? "" : String(value)}
+            onChangeText={(text) => {
+              const num = parseNumericInput(text);
+              onChange(num ?? 0);
+            }}
+            onBlur={onBlur}
+            colors={colors}
+            error={errors.proteins?.message}
+          />
+        )}
+      />
+
+      <Controller
+        control={control}
+        name="carbs"
+        render={({ field: { onChange, onBlur, value } }) => (
+          <NumericField
+            label="Glucides (g)"
+            value={value === 0 ? "" : String(value)}
+            onChangeText={(text) => {
+              const num = parseNumericInput(text);
+              onChange(num ?? 0);
+            }}
+            onBlur={onBlur}
+            colors={colors}
+            error={errors.carbs?.message}
+          />
+        )}
+      />
+
+      <Controller
+        control={control}
+        name="fats"
+        render={({ field: { onChange, onBlur, value } }) => (
+          <NumericField
+            label="Lipides (g)"
+            value={value === 0 ? "" : String(value)}
+            onChangeText={(text) => {
+              const num = parseNumericInput(text);
+              onChange(num ?? 0);
+            }}
+            onBlur={onBlur}
+            colors={colors}
+            error={errors.fats?.message}
+          />
+        )}
+      />
+
+      {/* Optional nutrition fields */}
+      <Controller
+        control={control}
+        name="fiber"
+        render={({ field: { onChange, onBlur, value } }) => (
+          <NumericField
+            label="Fibres (g)"
+            value={value == null ? "" : String(value)}
+            onChangeText={(text) => {
+              const num = parseNumericInput(text);
+              onChange(num);
+            }}
+            onBlur={onBlur}
+            colors={colors}
+            optional
+            error={errors.fiber?.message}
+          />
+        )}
+      />
+
+      <Controller
+        control={control}
+        name="sugars"
+        render={({ field: { onChange, onBlur, value } }) => (
+          <NumericField
+            label="Sucres (g)"
+            value={value == null ? "" : String(value)}
+            onChangeText={(text) => {
+              const num = parseNumericInput(text);
+              onChange(num);
+            }}
+            onBlur={onBlur}
+            colors={colors}
+            optional
+            error={errors.sugars?.message}
+          />
+        )}
+      />
+
+      <Controller
+        control={control}
+        name="saturated_fat"
+        render={({ field: { onChange, onBlur, value } }) => (
+          <NumericField
+            label="Graisses saturees (g)"
+            value={value == null ? "" : String(value)}
+            onChangeText={(text) => {
+              const num = parseNumericInput(text);
+              onChange(num);
+            }}
+            onBlur={onBlur}
+            colors={colors}
+            optional
+            error={errors.saturated_fat?.message}
+          />
+        )}
+      />
+
+      <Controller
+        control={control}
+        name="salt"
+        render={({ field: { onChange, onBlur, value } }) => (
+          <NumericField
+            label="Sel (g)"
+            value={value == null ? "" : String(value)}
+            onChangeText={(text) => {
+              const num = parseNumericInput(text);
+              onChange(num);
+            }}
+            onBlur={onBlur}
+            colors={colors}
+            optional
+            error={errors.salt?.message}
+          />
+        )}
+      />
+
+      {/* Submit */}
+      <Pressable
+        onPress={handleSubmit(onSubmit)}
+        style={({ pressed }) => ({
+          backgroundColor: colors.accent.calories,
+          paddingVertical: 14,
+          borderRadius: 12,
+          borderCurve: "continuous",
+          alignItems: "center",
+          marginTop: 8,
+          opacity: pressed ? 0.7 : 1,
+        })}
+      >
+        <Text style={{ color: "#fff", fontSize: 16, fontWeight: "600" }}>
+          Valider
+        </Text>
+      </Pressable>
+    </ScrollView>
   );
 }

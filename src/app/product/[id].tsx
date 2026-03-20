@@ -10,13 +10,13 @@ import {
   View,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useSQLiteContext } from "expo-sqlite";
 import { Image, type ImageStyle } from "expo-image";
 import { SymbolView } from "expo-symbols";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 
+import { useDb } from "@/app/_layout";
 import { useThemeColors } from "@/hooks/use-theme-colors";
 import { getProduct, upsertProduct } from "@/db/queries/products";
 import { isFavorite, addFavorite, removeFavorite } from "@/db/queries/favorites";
@@ -89,7 +89,7 @@ function NutrientRow({ label, value, colors, isLast }: NutrientRowProps) {
 export default function ProductDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const db = useSQLiteContext();
+  const db = useDb();
   const colors = useThemeColors();
 
   const [product, setProduct] = useState<ProductRow | null>(null);

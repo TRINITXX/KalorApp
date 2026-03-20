@@ -1,8 +1,8 @@
 import { useCallback, useMemo } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
-import { useSQLiteContext } from "expo-sqlite";
 import { router } from "expo-router";
 
+import { useDb } from "@/app/_layout";
 import { CalorieRing } from "@/components/nutrition/calorie-ring";
 import { MacroBar } from "@/components/nutrition/macro-bar";
 import { MicroChips } from "@/components/nutrition/micro-chips";
@@ -27,7 +27,7 @@ function getFormattedDate(): string {
 
 export default function DashboardScreen() {
   const colors = useThemeColors();
-  const db = useSQLiteContext();
+  const db = useDb();
   const goals = useSettingsStore((s) => s.goals);
   const enabledMeals = useSettingsStore((s) => s.enabledMeals);
 

@@ -1,14 +1,56 @@
-import { SQLiteProvider } from "expo-sqlite";
+import { createContext, useContext, useEffect, useState } from "react";
+import { ActivityIndicator, View } from "react-native";
 import { Stack } from "expo-router/stack";
+import type { SQLiteDatabase } from "expo-sqlite";
 
-import { DATABASE_NAME, migrateDbIfNeeded } from "@/db/client";
+import { openSharedDatabase } from "@/db/client";
 import { useSettingsStore } from "@/stores/settings-store";
+import { syncWidgetData } from "@/lib/widget-sync";
+
+const DbContext = createContext<SQLiteDatabase | null>(null);
+
+export function useDb(): SQLiteDatabase {
+  const db = useContext(DbContext);
+  if (!db) throw new Error("Database not initialized");
+  return db;
+}
 
 export default function RootLayout() {
   const theme = useSettingsStore((s) => s.theme);
+  const [db, setDb] = useState<SQLiteDatabase | null>(null);
+
+  useEffect(() => {
+    openSharedDatabase().then((database) => {
+      setDb(database);
+      syncWidgetData(database).catch(() => {});
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!db) return;
+    const unsub = useSettingsStore.subscribe((state) => {
+      syncWidgetData(db).catch(() => {});
+    });
+    return unsub;
+  }, [db]);
+
+  if (!db) {
+    return (
+      <View
+        style={{
+          flex: 1,
+          justifyContent: "center",
+          alignItems: "center",
+          backgroundColor: theme === "dark" ? "#000" : "#fff",
+        }}
+      >
+        <ActivityIndicator />
+      </View>
+    );
+  }
 
   return (
-    <SQLiteProvider databaseName={DATABASE_NAME} onInit={migrateDbIfNeeded}>
+    <DbContext.Provider value={db}>
       <Stack
         screenOptions={{
           headerShown: false,
@@ -32,6 +74,6 @@ export default function RootLayout() {
           options={{ presentation: "formSheet", sheetGrabberVisible: true }}
         />
       </Stack>
-    </SQLiteProvider>
+    </DbContext.Provider>
   );
 }

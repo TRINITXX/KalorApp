@@ -8,13 +8,13 @@ import {
   View,
 } from "react-native";
 import { useRouter } from "expo-router";
-import { useSQLiteContext } from "expo-sqlite";
 import {
   CameraView,
   useCameraPermissions,
   type BarcodeScanningResult,
 } from "expo-camera";
 
+import { useDb } from "@/app/_layout";
 import { useThemeColors } from "@/hooks/use-theme-colors";
 import { getProduct, upsertProduct } from "@/db/queries/products";
 import { fetchProduct } from "@/lib/open-food-facts";
@@ -22,7 +22,7 @@ import { flattenProductForDb } from "@/lib/product-utils";
 
 export default function ScanScreen() {
   const router = useRouter();
-  const db = useSQLiteContext();
+  const db = useDb();
   const colors = useThemeColors();
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
@@ -34,32 +34,48 @@ export default function ScanScreen() {
 
       // Check local DB first
       const localProduct = await getProduct(db, data);
-      if (localProduct) {
+      const hasNutrition =
+        localProduct &&
+        localProduct.source === "openfoodfacts" &&
+        (localProduct.calories > 0 ||
+          localProduct.proteins > 0 ||
+          localProduct.carbs > 0 ||
+          localProduct.fats > 0);
+
+      if (localProduct && hasNutrition) {
         router.replace(`/add-entry/confirm?productId=${data}`);
         return;
       }
 
-      // Fetch from OpenFoodFacts
+      // Fetch from OpenFoodFacts (new product or stale cache)
       try {
         const offProduct = await fetchProduct(data);
         if (offProduct) {
           await upsertProduct(db, flattenProductForDb(offProduct));
           router.replace(`/add-entry/confirm?productId=${data}`);
+        } else if (localProduct) {
+          // API returned nothing but we have a local entry (manual)
+          router.replace(`/add-entry/confirm?productId=${data}`);
         } else {
           router.replace(`/add-entry/manual?ean=${data}`);
         }
       } catch {
-        Alert.alert(
-          "Erreur reseau",
-          "Impossible de rechercher le produit. Verifiez votre connexion.",
-          [
-            { text: "Reessayer", onPress: () => setScanned(false) },
-            {
-              text: "Saisie manuelle",
-              onPress: () => router.replace(`/add-entry/manual?ean=${data}`),
-            },
-          ],
-        );
+        if (localProduct) {
+          // Network failed but we have cached data
+          router.replace(`/add-entry/confirm?productId=${data}`);
+        } else {
+          Alert.alert(
+            "Erreur reseau",
+            "Impossible de rechercher le produit. Verifiez votre connexion.",
+            [
+              { text: "Reessayer", onPress: () => setScanned(false) },
+              {
+                text: "Saisie manuelle",
+                onPress: () => router.replace(`/add-entry/manual?ean=${data}`),
+              },
+            ],
+          );
+        }
       }
     },
     [db, router, scanned],

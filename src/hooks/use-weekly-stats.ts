@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { useSQLiteContext } from "expo-sqlite";
-
+import { useDb } from "@/app/_layout";
 import { getWeeklyTotals, getWeeklySummaries } from "@/db/queries/entries";
 
 interface DailyTotal {
@@ -12,7 +11,7 @@ interface DailyTotal {
 }
 
 export function useWeeklyStats(startDate: string, endDate: string) {
-  const db = useSQLiteContext();
+  const db = useDb();
   const [dailyTotals, setDailyTotals] = useState<DailyTotal[]>([]);
 
   const refresh = useCallback(async () => {
@@ -33,7 +32,7 @@ interface WeeklySummary {
 }
 
 export function useWeekComparisons(weeks: number) {
-  const db = useSQLiteContext();
+  const db = useDb();
   const [summaries, setSummaries] = useState<WeeklySummary[]>([]);
 
   useEffect(() => {

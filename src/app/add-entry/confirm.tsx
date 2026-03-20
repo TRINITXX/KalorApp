@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useSQLiteContext } from "expo-sqlite";
 import { Image, type ImageStyle } from "expo-image";
 import * as Haptics from "expo-haptics";
 
+import { useDb } from "@/app/_layout";
 import { useThemeColors } from "@/hooks/use-theme-colors";
 import { getProduct, updateLastQuantity } from "@/db/queries/products";
 import { addEntry } from "@/db/queries/entries";
@@ -18,7 +18,7 @@ import type { MealType } from "@/types/nutrition";
 export default function ConfirmScreen() {
   const { productId } = useLocalSearchParams<{ productId: string }>();
   const router = useRouter();
-  const db = useSQLiteContext();
+  const db = useDb();
   const colors = useThemeColors();
 
   const [product, setProduct] = useState<ProductRow | null>(null);

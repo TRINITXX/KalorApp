@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
-import { useSQLiteContext } from "expo-sqlite";
+import { useState, useCallback, useMemo } from "react";
+import { useFocusEffect } from "expo-router";
 
+import { useDb } from "@/app/_layout";
 import { getEntriesByDate } from "@/db/queries/entries";
 import type { EntryRow } from "@/types/database";
 import type { DailySummaryRow } from "@/db/queries/entries";
@@ -17,7 +18,7 @@ const EMPTY_SUMMARY: DailySummaryRow = {
 };
 
 export function useDailySummary(date: string) {
-  const db = useSQLiteContext();
+  const db = useDb();
   const [entries, setEntries] = useState<EntryRow[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -27,9 +28,11 @@ export function useDailySummary(date: string) {
     setLoading(false);
   }, [db, date]);
 
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
+  useFocusEffect(
+    useCallback(() => {
+      refresh();
+    }, [refresh]),
+  );
 
   const summary = useMemo<DailySummaryRow>(() => {
     if (entries.length === 0) return EMPTY_SUMMARY;

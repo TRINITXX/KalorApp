@@ -10,8 +10,7 @@ import {
 } from "react-native";
 import { File, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
-import { useSQLiteContext } from "expo-sqlite";
-
+import { useDb } from "@/app/_layout";
 import { MEALS } from "@/constants/meals";
 import { SPACING } from "@/constants/theme";
 import { getAllEntriesForExport } from "@/db/queries/entries";
@@ -408,7 +407,7 @@ interface FavoritesSectionProps {
 }
 
 function FavoritesSection({ colors }: FavoritesSectionProps) {
-  const db = useSQLiteContext();
+  const db = useDb();
   const [favorites, setFavorites] = useState<FavoriteWithProduct[]>([]);
 
   const loadFavorites = useCallback(async () => {
@@ -528,7 +527,7 @@ interface ExportSectionProps {
 }
 
 function ExportSection({ colors }: ExportSectionProps) {
-  const db = useSQLiteContext();
+  const db = useDb();
   const [exporting, setExporting] = useState(false);
 
   const handleExport = useCallback(async () => {
