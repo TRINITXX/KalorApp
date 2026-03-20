@@ -27,6 +27,7 @@ export default function ScanScreen() {
   const colors = useThemeColors();
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
+  const scanLock = useRef(false);
   const [torch, setTorch] = useState(false);
   const [autoFocus, setAutoFocus] = useState<"on" | "off">("on");
   const cameraRef = useRef<CameraView>(null);
@@ -78,7 +79,10 @@ export default function ScanScreen() {
               },
               {
                 text: "Annuler",
-                onPress: () => setScanned(false),
+                onPress: () => {
+                  scanLock.current = false;
+                  setScanned(false);
+                },
                 style: "cancel",
               },
             ],
@@ -91,11 +95,12 @@ export default function ScanScreen() {
 
   const handleBarCodeScanned = useCallback(
     ({ data }: BarcodeScanningResult) => {
-      if (scanned) return;
+      if (scanLock.current) return;
+      scanLock.current = true;
       setScanned(true);
       lookupEan(data);
     },
-    [lookupEan, scanned],
+    [lookupEan],
   );
 
   const handleManualEan = useCallback(() => {
@@ -263,7 +268,10 @@ export default function ScanScreen() {
       <View style={styles.bottomBar}>
         {scanned ? (
           <Pressable
-            onPress={() => setScanned(false)}
+            onPress={() => {
+              scanLock.current = false;
+              setScanned(false);
+            }}
             style={({ pressed }) => [
               styles.button,
               {
