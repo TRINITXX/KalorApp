@@ -7,8 +7,13 @@ import { SymbolView } from "expo-symbols";
 
 import { useDb } from "@/app/_layout";
 import { useThemeColors } from "@/hooks/use-theme-colors";
-import { getFavorites, removeFavorite } from "@/db/queries/favorites";
+import {
+  getFavorites,
+  removeFavorite,
+  updateFavoriteQuantity,
+} from "@/db/queries/favorites";
 import type { FavoriteWithProduct } from "@/db/queries/favorites";
+import { QuantityInput } from "@/components/nutrition/quantity-input";
 
 export default function FavoritesScreen() {
   const router = useRouter();
@@ -97,99 +102,125 @@ export default function FavoritesScreen() {
         <View
           key={fav.id}
           style={{
-            flexDirection: "row",
-            alignItems: "center",
             backgroundColor: colors.card,
             borderRadius: 12,
             borderCurve: "continuous",
             padding: 12,
-            gap: 12,
+            gap: 10,
           }}
         >
-          {/* Image */}
-          {fav.image_url ? (
-            <Image
-              source={{ uri: fav.image_url }}
-              style={
-                {
+          {/* Top row: image + info + remove */}
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 12,
+            }}
+          >
+            {fav.image_url ? (
+              <Image
+                source={{ uri: fav.image_url }}
+                style={
+                  {
+                    width: 48,
+                    height: 48,
+                    borderRadius: 10,
+                    borderCurve: "continuous",
+                  } as unknown as ImageStyle
+                }
+                contentFit="cover"
+                transition={200}
+              />
+            ) : (
+              <View
+                style={{
                   width: 48,
                   height: 48,
                   borderRadius: 10,
                   borderCurve: "continuous",
-                } as unknown as ImageStyle
-              }
-              contentFit="cover"
-              transition={200}
-            />
-          ) : (
-            <View
-              style={{
-                width: 48,
-                height: 48,
-                borderRadius: 10,
-                borderCurve: "continuous",
-                backgroundColor: colors.isDark
-                  ? "rgba(255,255,255,0.08)"
-                  : "rgba(0,0,0,0.05)",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <Text style={{ fontSize: 22, color: colors.textMuted }}>?</Text>
-            </View>
-          )}
+                  backgroundColor: colors.isDark
+                    ? "rgba(255,255,255,0.08)"
+                    : "rgba(0,0,0,0.05)",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Text style={{ fontSize: 22, color: colors.textMuted }}>?</Text>
+              </View>
+            )}
 
-          {/* Info — tap to open product detail */}
-          <Pressable
-            onPress={() => router.push(`/product/${fav.id}`)}
-            style={{ flex: 1 }}
-          >
-            <Text
-              style={{
-                fontSize: 15,
-                fontWeight: "600",
-                color: colors.textPrimary,
-              }}
-              numberOfLines={1}
+            <Pressable
+              onPress={() => router.push(`/product/${fav.id}`)}
+              style={{ flex: 1 }}
             >
-              {fav.name}
-            </Text>
-            {fav.brand ? (
               <Text
                 style={{
-                  fontSize: 13,
-                  color: colors.textSecondary,
-                  marginTop: 2,
+                  fontSize: 15,
+                  fontWeight: "600",
+                  color: colors.textPrimary,
                 }}
                 numberOfLines={1}
               >
-                {fav.brand}
+                {fav.name}
               </Text>
-            ) : null}
+              {fav.brand ? (
+                <Text
+                  style={{
+                    fontSize: 13,
+                    color: colors.textSecondary,
+                    marginTop: 2,
+                  }}
+                  numberOfLines={1}
+                >
+                  {fav.brand}
+                </Text>
+              ) : null}
+            </Pressable>
+
+            <Pressable
+              onPress={() => handleRemove(fav.id, fav.name)}
+              hitSlop={8}
+              style={{ padding: 4 }}
+            >
+              <SymbolView
+                name="heart.fill"
+                size={22}
+                tintColor={colors.accent.error}
+              />
+            </Pressable>
+          </View>
+
+          {/* Bottom row: quantity */}
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "space-between",
+              paddingTop: 4,
+              borderTopWidth: 1,
+              borderTopColor: colors.separator,
+            }}
+          >
             <Text
               style={{
-                fontSize: 12,
+                fontSize: 13,
                 color: colors.textMuted,
-                marginTop: 2,
-                fontVariant: ["tabular-nums"],
               }}
             >
-              {Math.round(fav.calories)} kcal / 100g
+              Quantite par defaut
             </Text>
-          </Pressable>
-
-          {/* Remove button */}
-          <Pressable
-            onPress={() => handleRemove(fav.id, fav.name)}
-            hitSlop={8}
-            style={{ padding: 4 }}
-          >
-            <SymbolView
-              name="heart.fill"
-              size={22}
-              tintColor={colors.accent.error}
+            <QuantityInput
+              value={fav.favorite_quantity ?? fav.last_quantity}
+              onChange={(v) => {
+                updateFavoriteQuantity(db, fav.id, v);
+                setFavorites((prev) =>
+                  prev.map((f) =>
+                    f.id === fav.id ? { ...f, favorite_quantity: v } : f,
+                  ),
+                );
+              }}
             />
-          </Pressable>
+          </View>
         </View>
       ))}
     </ScrollView>

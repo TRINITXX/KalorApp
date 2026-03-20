@@ -40,6 +40,7 @@ export const CREATE_FAVORITES_TABLE = `
 CREATE TABLE IF NOT EXISTS favorites (
   product_id      TEXT PRIMARY KEY REFERENCES products(id) ON DELETE CASCADE,
   sort_order      INTEGER DEFAULT 0,
+  quantity        REAL,
   created_at      TEXT DEFAULT (datetime('now'))
 );`;
 

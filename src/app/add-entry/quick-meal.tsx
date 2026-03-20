@@ -45,10 +45,11 @@ export default function QuickMealScreen() {
     setLoading(true);
     const data = await getFavorites(db);
     setFavorites(data);
-    // Initialize quantities with last_quantity for each product
+    // Initialize quantities: favorite_quantity > last_quantity > 100
     const initialQuantities: Record<string, number> = {};
     for (const fav of data) {
-      initialQuantities[fav.id] = fav.last_quantity || 100;
+      initialQuantities[fav.id] =
+        (fav.favorite_quantity ?? fav.last_quantity) || 100;
     }
     setQuantities(initialQuantities);
     setLoading(false);

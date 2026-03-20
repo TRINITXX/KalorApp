@@ -7,7 +7,7 @@ import {
   CREATE_PRODUCTS_TABLE,
 } from "./schema";
 
-const CURRENT_VERSION = 1;
+const CURRENT_VERSION = 2;
 
 export async function migrateDbIfNeeded(db: SQLiteDatabase): Promise<void> {
   await db.execAsync("PRAGMA foreign_keys = ON;");
@@ -25,6 +25,10 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase): Promise<void> {
     await db.execAsync(CREATE_ENTRIES_TABLE);
     await db.execAsync(CREATE_FAVORITES_TABLE);
     await db.execAsync(CREATE_INDEXES);
+  }
+
+  if (currentVersion < 2) {
+    await db.execAsync("ALTER TABLE favorites ADD COLUMN quantity REAL");
   }
 
   await db.execAsync(`PRAGMA user_version = ${CURRENT_VERSION}`);

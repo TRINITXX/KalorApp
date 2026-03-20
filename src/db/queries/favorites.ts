@@ -4,6 +4,7 @@ import type { ProductRow } from "@/types/database";
 
 export interface FavoriteWithProduct extends ProductRow {
   sort_order: number;
+  favorite_quantity: number | null;
 }
 
 export async function addFavorite(
@@ -27,7 +28,7 @@ export async function getFavorites(
   db: SQLiteDatabase,
 ): Promise<FavoriteWithProduct[]> {
   return db.getAllAsync<FavoriteWithProduct>(
-    `SELECT p.*, f.sort_order FROM favorites f INNER JOIN products p ON p.id = f.product_id ORDER BY f.sort_order ASC`,
+    `SELECT p.*, f.sort_order, f.quantity AS favorite_quantity FROM favorites f INNER JOIN products p ON p.id = f.product_id ORDER BY f.sort_order ASC`,
   );
 }
 
@@ -40,6 +41,29 @@ export async function isFavorite(
     productId,
   );
   return (result?.count ?? 0) > 0;
+}
+
+export async function getFavoriteQuantity(
+  db: SQLiteDatabase,
+  productId: string,
+): Promise<number | null> {
+  const result = await db.getFirstAsync<{ quantity: number | null }>(
+    "SELECT quantity FROM favorites WHERE product_id = ?",
+    productId,
+  );
+  return result?.quantity ?? null;
+}
+
+export async function updateFavoriteQuantity(
+  db: SQLiteDatabase,
+  productId: string,
+  quantity: number | null,
+): Promise<void> {
+  await db.runAsync(
+    "UPDATE favorites SET quantity = ? WHERE product_id = ?",
+    quantity,
+    productId,
+  );
 }
 
 export async function reorderFavorites(

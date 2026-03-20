@@ -14,6 +14,7 @@ import {
   isFavorite,
   addFavorite,
   removeFavorite,
+  getFavoriteQuantity,
 } from "@/db/queries/favorites";
 import { calculateForQuantity, getMealForTime } from "@/lib/nutrition-utils";
 import { productRowToNutrition, formatDateISO } from "@/lib/product-utils";
@@ -39,13 +40,14 @@ export default function ConfirmScreen() {
     if (!productId) return;
 
     const load = async () => {
-      const [p, fav] = await Promise.all([
+      const [p, fav, favQty] = await Promise.all([
         getProduct(db, productId),
         isFavorite(db, productId),
+        getFavoriteQuantity(db, productId),
       ]);
       if (p) {
         setProduct(p);
-        setQuantity(p.last_quantity);
+        setQuantity(favQty ?? p.last_quantity);
         setFavorite(fav);
       }
     };
