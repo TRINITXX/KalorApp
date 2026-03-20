@@ -28,14 +28,12 @@ export default function ScanScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
   const [torch, setTorch] = useState(false);
+  const [autoFocus, setAutoFocus] = useState<"on" | "off">("on");
   const cameraRef = useRef<CameraView>(null);
 
-  const handleBarCodeScanned = useCallback(
-    async ({ data }: BarcodeScanningResult) => {
-      if (scanned) return;
-      setScanned(true);
-
-      const localProduct = await getProduct(db, data);
+  const lookupEan = useCallback(
+    async (ean: string) => {
+      const localProduct = await getProduct(db, ean);
       const hasNutrition =
         localProduct &&
         localProduct.source === "openfoodfacts" &&
@@ -45,40 +43,82 @@ export default function ScanScreen() {
           localProduct.fats > 0);
 
       if (localProduct && hasNutrition) {
-        router.replace(`/add-entry/confirm?productId=${data}`);
+        router.replace(`/add-entry/confirm?productId=${ean}`);
         return;
       }
 
       try {
-        const offProduct = await fetchProduct(data);
+        const offProduct = await fetchProduct(ean);
         if (offProduct) {
           await upsertProduct(db, flattenProductForDb(offProduct));
-          router.replace(`/add-entry/confirm?productId=${data}`);
+          router.replace(`/add-entry/confirm?productId=${ean}`);
         } else if (localProduct) {
-          router.replace(`/add-entry/confirm?productId=${data}`);
+          router.replace(`/add-entry/confirm?productId=${ean}`);
         } else {
-          router.replace(`/add-entry/manual?ean=${data}`);
+          router.replace(`/add-entry/manual?ean=${ean}`);
         }
       } catch {
         if (localProduct) {
-          router.replace(`/add-entry/confirm?productId=${data}`);
+          router.replace(`/add-entry/confirm?productId=${ean}`);
         } else {
           Alert.alert(
             "Erreur réseau",
             "Impossible de rechercher le produit. Vérifiez votre connexion.",
             [
-              { text: "Réessayer", onPress: () => setScanned(false) },
+              {
+                text: "Réessayer",
+                onPress: () => {
+                  setScanned(true);
+                  lookupEan(ean);
+                },
+              },
               {
                 text: "Saisie manuelle",
-                onPress: () => router.replace(`/add-entry/manual?ean=${data}`),
+                onPress: () => router.replace(`/add-entry/manual?ean=${ean}`),
+              },
+              {
+                text: "Annuler",
+                onPress: () => setScanned(false),
+                style: "cancel",
               },
             ],
           );
         }
       }
     },
-    [db, router, scanned],
+    [db, router],
   );
+
+  const handleBarCodeScanned = useCallback(
+    ({ data }: BarcodeScanningResult) => {
+      if (scanned) return;
+      setScanned(true);
+      lookupEan(data);
+    },
+    [lookupEan, scanned],
+  );
+
+  const handleManualEan = useCallback(() => {
+    Alert.prompt(
+      "Saisir un code-barres",
+      "Entrez le code EAN du produit",
+      [
+        { text: "Annuler", style: "cancel" },
+        {
+          text: "Rechercher",
+          onPress: (ean?: string) => {
+            if (ean && ean.trim().length > 0) {
+              setScanned(true);
+              lookupEan(ean.trim());
+            }
+          },
+        },
+      ],
+      "plain-text",
+      "",
+      "number-pad",
+    );
+  }, [lookupEan]);
 
   if (!permission) {
     return (
@@ -141,6 +181,7 @@ export default function ScanScreen() {
         style={StyleSheet.absoluteFillObject}
         facing="back"
         enableTorch={torch}
+        autofocus={autoFocus}
         barcodeScannerSettings={{
           barcodeTypes: ["ean13", "ean8"],
         }}
@@ -170,30 +211,57 @@ export default function ScanScreen() {
           <SymbolView name="chevron.left" size={18} tintColor="#fff" />
         </Pressable>
 
-        <Pressable
-          onPress={() => setTorch((t) => !t)}
-          hitSlop={12}
-          style={({ pressed }) => ({
-            width: 40,
-            height: 40,
-            borderRadius: 20,
-            backgroundColor: torch ? "rgba(255,204,0,0.8)" : "rgba(0,0,0,0.4)",
-            alignItems: "center",
-            justifyContent: "center",
-            opacity: pressed ? 0.7 : 1,
-          })}
-        >
-          <SymbolView
-            name={torch ? "flashlight.on.fill" : "flashlight.off.fill"}
-            size={18}
-            tintColor="#fff"
-          />
-        </Pressable>
+        <View style={{ flexDirection: "row", gap: 12 }}>
+          <Pressable
+            onPress={() => setAutoFocus((f) => (f === "on" ? "off" : "on"))}
+            hitSlop={12}
+            style={({ pressed }) => ({
+              width: 40,
+              height: 40,
+              borderRadius: 20,
+              backgroundColor:
+                autoFocus === "on"
+                  ? "rgba(255,255,255,0.6)"
+                  : "rgba(0,0,0,0.4)",
+              alignItems: "center",
+              justifyContent: "center",
+              opacity: pressed ? 0.7 : 1,
+            })}
+          >
+            <SymbolView
+              name="camera.macro"
+              size={18}
+              tintColor={autoFocus === "on" ? "#000" : "#fff"}
+            />
+          </Pressable>
+
+          <Pressable
+            onPress={() => setTorch((t) => !t)}
+            hitSlop={12}
+            style={({ pressed }) => ({
+              width: 40,
+              height: 40,
+              borderRadius: 20,
+              backgroundColor: torch
+                ? "rgba(255,204,0,0.8)"
+                : "rgba(0,0,0,0.4)",
+              alignItems: "center",
+              justifyContent: "center",
+              opacity: pressed ? 0.7 : 1,
+            })}
+          >
+            <SymbolView
+              name={torch ? "flashlight.on.fill" : "flashlight.off.fill"}
+              size={18}
+              tintColor="#fff"
+            />
+          </Pressable>
+        </View>
       </View>
 
       {/* Bottom controls */}
       <View style={styles.bottomBar}>
-        {scanned && (
+        {scanned ? (
           <Pressable
             onPress={() => setScanned(false)}
             style={({ pressed }) => [
@@ -205,6 +273,19 @@ export default function ScanScreen() {
             ]}
           >
             <Text style={styles.buttonText}>Scanner à nouveau</Text>
+          </Pressable>
+        ) : (
+          <Pressable
+            onPress={handleManualEan}
+            style={({ pressed }) => [
+              styles.button,
+              {
+                backgroundColor: "rgba(255,255,255,0.2)",
+                opacity: pressed ? 0.7 : 1,
+              },
+            ]}
+          >
+            <Text style={styles.buttonText}>Saisir le code-barres</Text>
           </Pressable>
         )}
       </View>
