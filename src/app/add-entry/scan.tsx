@@ -222,52 +222,25 @@ export default function ScanScreen() {
           <SymbolView name="chevron.left" size={18} tintColor="#fff" />
         </Pressable>
 
-        <View style={{ flexDirection: "row", gap: 12 }}>
-          <Pressable
-            onPress={() => setAutoFocus((f) => (f === "on" ? "off" : "on"))}
-            hitSlop={12}
-            style={({ pressed }) => ({
-              width: 40,
-              height: 40,
-              borderRadius: 20,
-              backgroundColor:
-                autoFocus === "on"
-                  ? "rgba(255,255,255,0.6)"
-                  : "rgba(0,0,0,0.4)",
-              alignItems: "center",
-              justifyContent: "center",
-              opacity: pressed ? 0.7 : 1,
-            })}
-          >
-            <SymbolView
-              name="camera.macro"
-              size={18}
-              tintColor={autoFocus === "on" ? "#000" : "#fff"}
-            />
-          </Pressable>
-
-          <Pressable
-            onPress={() => setTorch((t) => !t)}
-            hitSlop={12}
-            style={({ pressed }) => ({
-              width: 40,
-              height: 40,
-              borderRadius: 20,
-              backgroundColor: torch
-                ? "rgba(255,204,0,0.8)"
-                : "rgba(0,0,0,0.4)",
-              alignItems: "center",
-              justifyContent: "center",
-              opacity: pressed ? 0.7 : 1,
-            })}
-          >
-            <SymbolView
-              name={torch ? "flashlight.on.fill" : "flashlight.off.fill"}
-              size={18}
-              tintColor="#fff"
-            />
-          </Pressable>
-        </View>
+        <Pressable
+          onPress={() => setTorch((t) => !t)}
+          hitSlop={12}
+          style={({ pressed }) => ({
+            width: 40,
+            height: 40,
+            borderRadius: 20,
+            backgroundColor: torch ? "rgba(255,204,0,0.8)" : "rgba(0,0,0,0.4)",
+            alignItems: "center",
+            justifyContent: "center",
+            opacity: pressed ? 0.7 : 1,
+          })}
+        >
+          <SymbolView
+            name={torch ? "flashlight.on.fill" : "flashlight.off.fill"}
+            size={18}
+            tintColor="#fff"
+          />
+        </Pressable>
       </View>
 
       {/* Bottom controls */}
