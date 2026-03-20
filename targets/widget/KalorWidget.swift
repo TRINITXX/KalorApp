@@ -44,8 +44,13 @@ struct KalorWidget: Widget {
 
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: KalorWidgetProvider()) { entry in
-            KalorWidgetEntryView(entry: entry)
-                .containerBackground(.fill.tertiary, for: .widget)
+            if #available(iOS 17.0, *) {
+                KalorWidgetEntryView(entry: entry)
+                    .containerBackground(.fill.tertiary, for: .widget)
+            } else {
+                KalorWidgetEntryView(entry: entry)
+                    .padding()
+            }
         }
         .configurationDisplayName("KalorApp")
         .description("Suivi calorique du jour")
