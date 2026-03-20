@@ -1,6 +1,7 @@
 import type { Product, NutritionValues } from "@/types/nutrition";
 
 const BASE_URL = "https://world.openfoodfacts.org";
+const USER_AGENT = "KalorApp/1.0 (contact@kalorapp.com)";
 const TIMEOUT_MS = 15000;
 const MAX_RETRIES = 2;
 
@@ -62,7 +63,10 @@ async function fetchWithTimeout(
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
       try {
-        return await fetch(url, { signal: controller.signal });
+        return await fetch(url, {
+          signal: controller.signal,
+          headers: { "User-Agent": USER_AGENT },
+        });
       } finally {
         clearTimeout(timer);
       }
