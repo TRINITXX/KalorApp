@@ -74,6 +74,7 @@ export function MicroChips({
     <View
       style={{
         flexDirection: "row",
+        justifyContent: "center",
         gap: 8,
       }}
     >
