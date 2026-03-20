@@ -26,6 +26,15 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
+        name="favorites"
+        options={{
+          title: "Favoris",
+          tabBarIcon: ({ color }) => (
+            <SymbolView name="heart" tintColor={color} size={24} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="history"
         options={{
           title: "Historique",
