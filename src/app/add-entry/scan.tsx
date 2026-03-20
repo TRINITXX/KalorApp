@@ -54,14 +54,12 @@ export default function ScanScreen() {
           await upsertProduct(db, flattenProductForDb(offProduct));
           router.replace(`/add-entry/confirm?productId=${data}`);
         } else if (localProduct) {
-          // API returned nothing but we have a local entry (manual)
           router.replace(`/add-entry/confirm?productId=${data}`);
         } else {
           router.replace(`/add-entry/manual?ean=${data}`);
         }
       } catch {
         if (localProduct) {
-          // Network failed but we have cached data
           router.replace(`/add-entry/confirm?productId=${data}`);
         } else {
           Alert.alert(

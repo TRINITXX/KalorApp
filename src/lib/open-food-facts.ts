@@ -2,7 +2,7 @@ import type { Product, NutritionValues } from "@/types/nutrition";
 
 const BASE_URL = "https://world.openfoodfacts.org";
 const USER_AGENT = "KalorApp/1.0 (personal project)";
-const TIMEOUT_MS = 5000;
+const TIMEOUT_MS = 10000;
 
 interface OFFResponse {
   code: string;
@@ -21,17 +21,24 @@ export function parseProduct(
   if (raw.status !== 1 || !raw.product) return null;
 
   const n = raw.product.nutriments ?? {};
-  const salt =
-    n.salt_100g ?? (n.sodium_100g != null ? n.sodium_100g * 2.5 : null);
+
+  // Some products only have _prepared_100g variants (e.g. ready-to-cook items)
+  const val = (key: string): number | undefined =>
+    n[`${key}_100g`] ?? n[`${key}_prepared_100g`];
+  const optVal = (key: string): number | null =>
+    n[`${key}_100g`] ?? n[`${key}_prepared_100g`] ?? null;
+
+  const sodium = optVal("sodium");
+  const salt = optVal("salt") ?? (sodium != null ? sodium * 2.5 : null);
 
   const nutrition_per_100g: NutritionValues = {
-    calories: n["energy-kcal_100g"] ?? 0,
-    proteins: n.proteins_100g ?? 0,
-    carbs: n.carbohydrates_100g ?? 0,
-    fats: n.fat_100g ?? 0,
-    fiber: n.fiber_100g ?? null,
-    sugars: n.sugars_100g ?? null,
-    saturated_fat: n["saturated-fat_100g"] ?? null,
+    calories: val("energy-kcal") ?? 0,
+    proteins: val("proteins") ?? 0,
+    carbs: val("carbohydrates") ?? 0,
+    fats: val("fat") ?? 0,
+    fiber: optVal("fiber"),
+    sugars: optVal("sugars"),
+    saturated_fat: optVal("saturated-fat"),
     salt,
   };
 
