@@ -4,7 +4,7 @@ import { router } from "expo-router";
 
 import { useDb } from "@/app/_layout";
 import { CalorieRing } from "@/components/nutrition/calorie-ring";
-import { MacroBar } from "@/components/nutrition/macro-bar";
+import { MacroRing } from "@/components/nutrition/macro-ring";
 import { MicroChips } from "@/components/nutrition/micro-chips";
 import { MealSection } from "@/components/nutrition/meal-section";
 import { MEALS } from "@/constants/meals";
@@ -104,21 +104,27 @@ export default function DashboardScreen() {
           />
         </View>
 
-        {/* Macro bars */}
-        <View style={{ gap: SPACING.md }}>
-          <MacroBar
+        {/* Macro rings */}
+        <View
+          style={{
+            flexDirection: "row",
+            justifyContent: "space-evenly",
+            alignItems: "flex-start",
+          }}
+        >
+          <MacroRing
             label="Proteines"
             current={summary.proteins}
             goal={goals.proteins}
             color={colors.accent.proteins}
           />
-          <MacroBar
+          <MacroRing
             label="Glucides"
             current={summary.carbs}
             goal={goals.carbs}
             color={colors.accent.carbs}
           />
-          <MacroBar
+          <MacroRing
             label="Lipides"
             current={summary.fats}
             goal={goals.fats}
