@@ -183,16 +183,58 @@ export default function AddEntryScreen() {
                   gap: 10,
                 }}
               >
-                <Text
+                <View
                   style={{
-                    fontSize: 15,
-                    fontWeight: "600",
-                    color: colors.textPrimary,
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 12,
                   }}
-                  numberOfLines={1}
                 >
-                  {item.product.name}
-                </Text>
+                  {item.product.image_url ? (
+                    <Image
+                      source={{ uri: item.product.image_url }}
+                      style={
+                        {
+                          width: 40,
+                          height: 40,
+                          borderRadius: 8,
+                          borderCurve: "continuous",
+                        } as unknown as ImageStyle
+                      }
+                      contentFit="cover"
+                      transition={200}
+                    />
+                  ) : (
+                    <View
+                      style={{
+                        width: 40,
+                        height: 40,
+                        borderRadius: 8,
+                        borderCurve: "continuous",
+                        backgroundColor: colors.isDark
+                          ? "rgba(255,255,255,0.08)"
+                          : "rgba(0,0,0,0.05)",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <Text style={{ fontSize: 18, color: colors.textMuted }}>
+                        ?
+                      </Text>
+                    </View>
+                  )}
+                  <Text
+                    style={{
+                      fontSize: 15,
+                      fontWeight: "600",
+                      color: colors.textPrimary,
+                      flex: 1,
+                    }}
+                    numberOfLines={1}
+                  >
+                    {item.product.name}
+                  </Text>
+                </View>
                 <View
                   style={{
                     flexDirection: "row",
