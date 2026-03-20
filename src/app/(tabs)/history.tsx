@@ -6,6 +6,8 @@ import { useThemeColors } from "@/hooks/use-theme-colors";
 import { useWeeklyStats, useWeekComparisons } from "@/hooks/use-weekly-stats";
 import { useSettingsStore } from "@/stores/settings-store";
 import { formatDateISO } from "@/lib/product-utils";
+import { CalorieRing } from "@/components/nutrition/calorie-ring";
+import { MacroRing } from "@/components/nutrition/macro-ring";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -228,7 +230,8 @@ function SimpleBarChart({
 
 function WeekView() {
   const colors = useThemeColors();
-  const goalCalories = useSettingsStore((s) => s.goals.calories) ?? 2100;
+  const goals = useSettingsStore((s) => s.goals);
+  const goalCalories = goals.calories ?? 2100;
   const [weekOffset, setWeekOffset] = useState(0);
 
   const monday = useMemo(() => getMonday(weekOffset), [weekOffset]);
@@ -327,13 +330,14 @@ function WeekView() {
         </Pressable>
       </View>
 
-      {/* Weekly totals summary */}
+      {/* Weekly totals — rings */}
       <View
         style={{
           backgroundColor: colors.card,
           borderRadius: 14,
+          borderCurve: "continuous",
           padding: SPACING.lg,
-          gap: SPACING.sm,
+          gap: SPACING.md,
         }}
       >
         <Text
@@ -341,43 +345,44 @@ function WeekView() {
             fontSize: 13,
             fontWeight: "500",
             color: colors.textMuted,
-            marginBottom: 4,
+            textAlign: "center",
           }}
         >
           Total semaine
         </Text>
-        <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-          <StatItem
-            label="Calories"
-            value={weekTotals.calories}
-            unit="kcal"
-            color={colors.accent.calories}
-            textColor={colors.textPrimary}
-            mutedColor={colors.textMuted}
+        <View style={{ alignItems: "center" }}>
+          <CalorieRing
+            consumed={weekTotals.calories}
+            goal={goalCalories * 7}
+            size={130}
           />
-          <StatItem
-            label="Prot."
-            value={weekTotals.proteins}
-            unit="g"
+        </View>
+        <View
+          style={{
+            flexDirection: "row",
+            justifyContent: "space-evenly",
+          }}
+        >
+          <MacroRing
+            label="Proteines"
+            current={weekTotals.proteins}
+            goal={goals.proteins != null ? goals.proteins * 7 : null}
             color={colors.accent.proteins}
-            textColor={colors.textPrimary}
-            mutedColor={colors.textMuted}
+            size={80}
           />
-          <StatItem
-            label="Gluc."
-            value={weekTotals.carbs}
-            unit="g"
+          <MacroRing
+            label="Glucides"
+            current={weekTotals.carbs}
+            goal={goals.carbs != null ? goals.carbs * 7 : null}
             color={colors.accent.carbs}
-            textColor={colors.textPrimary}
-            mutedColor={colors.textMuted}
+            size={80}
           />
-          <StatItem
-            label="Lip."
-            value={weekTotals.fats}
-            unit="g"
+          <MacroRing
+            label="Lipides"
+            current={weekTotals.fats}
+            goal={goals.fats != null ? goals.fats * 7 : null}
             color={colors.accent.fats}
-            textColor={colors.textPrimary}
-            mutedColor={colors.textMuted}
+            size={80}
           />
         </View>
       </View>
