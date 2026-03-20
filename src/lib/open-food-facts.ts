@@ -1,8 +1,8 @@
 import type { Product, NutritionValues } from "@/types/nutrition";
 
 const BASE_URL = "https://world.openfoodfacts.org";
-const USER_AGENT = "KalorApp/1.0 (personal project)";
-const TIMEOUT_MS = 10000;
+const TIMEOUT_MS = 15000;
+const MAX_RETRIES = 2;
 
 interface OFFResponse {
   code: string;
@@ -55,22 +55,21 @@ export function parseProduct(
 
 async function fetchWithTimeout(
   url: string,
-  retries: number = 1,
+  retries: number = MAX_RETRIES,
 ): Promise<Response> {
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
+      const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
       try {
-        return await fetch(url, {
-          headers: { "User-Agent": USER_AGENT },
-          signal: controller.signal,
-        });
+        return await fetch(url, { signal: controller.signal });
       } finally {
-        clearTimeout(timeout);
+        clearTimeout(timer);
       }
     } catch (error) {
       if (attempt === retries) throw error;
+      // Wait briefly before retry
+      await new Promise((r) => setTimeout(r, 500));
     }
   }
   throw new Error("Unreachable");
