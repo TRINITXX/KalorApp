@@ -1,14 +1,24 @@
 import { useCallback, useState } from "react";
-import { Alert, Pressable, ScrollView, Text, View } from "react-native";
+import {
+  Alert,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { Image, type ImageStyle } from "expo-image";
-import * as Haptics from "expo-haptics";
-
 import { SymbolView } from "expo-symbols";
+import * as Haptics from "expo-haptics";
 
 import { useDb } from "@/app/_layout";
 import { useThemeColors } from "@/hooks/use-theme-colors";
-import { getProduct, updateLastQuantity } from "@/db/queries/products";
+import {
+  getProduct,
+  updateLastQuantity,
+  upsertProduct,
+} from "@/db/queries/products";
 import { addEntry } from "@/db/queries/entries";
 import {
   isFavorite,
@@ -32,6 +42,17 @@ export default function ConfirmScreen() {
   const [product, setProduct] = useState<ProductRow | null>(null);
   const [quantity, setQuantity] = useState(100);
   const [favorite, setFavorite] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editValues, setEditValues] = useState({
+    calories: "",
+    proteins: "",
+    carbs: "",
+    fats: "",
+    fiber: "",
+    sugars: "",
+    saturated_fat: "",
+    salt: "",
+  });
   const [selectedMeal, setSelectedMeal] = useState<MealType>(
     getMealForTime(new Date().getHours()),
   );
@@ -49,6 +70,17 @@ export default function ConfirmScreen() {
           setProduct(p);
           setQuantity(favQty ?? p.last_quantity);
           setFavorite(fav);
+          setEditValues({
+            calories: String(p.calories),
+            proteins: String(p.proteins),
+            carbs: String(p.carbs),
+            fats: String(p.fats),
+            fiber: p.fiber != null ? String(p.fiber) : "",
+            sugars: p.sugars != null ? String(p.sugars) : "",
+            saturated_fat:
+              p.saturated_fat != null ? String(p.saturated_fat) : "",
+            salt: p.salt != null ? String(p.salt) : "",
+          });
         }
       };
       load();
@@ -66,13 +98,40 @@ export default function ConfirmScreen() {
     }
   }, [db, favorite, product]);
 
+  const handleSaveEdit = useCallback(async () => {
+    if (!product) return;
+    const parse = (v: string) => {
+      const n = parseFloat(v.replace(",", "."));
+      return isNaN(n) ? 0 : n;
+    };
+    const parseOpt = (v: string) => {
+      if (v.trim() === "") return null;
+      const n = parseFloat(v.replace(",", "."));
+      return isNaN(n) ? null : n;
+    };
+
+    const updated: Omit<ProductRow, "created_at"> = {
+      ...product,
+      calories: parse(editValues.calories),
+      proteins: parse(editValues.proteins),
+      carbs: parse(editValues.carbs),
+      fats: parse(editValues.fats),
+      fiber: parseOpt(editValues.fiber),
+      sugars: parseOpt(editValues.sugars),
+      saturated_fat: parseOpt(editValues.saturated_fat),
+      salt: parseOpt(editValues.salt),
+    };
+    await upsertProduct(db, updated);
+    setProduct({ ...updated, created_at: product.created_at });
+    setEditing(false);
+  }, [db, editValues, product]);
+
   const calculated = product
     ? calculateForQuantity(productRowToNutrition(product), quantity)
     : null;
 
   const handleAdd = useCallback(async () => {
     if (!product || !calculated) return;
-
     try {
       await addEntry(db, {
         product_id: product.id,
@@ -89,7 +148,6 @@ export default function ConfirmScreen() {
         saturated_fat: calculated.saturated_fat,
         salt: calculated.salt,
       });
-
       await updateLastQuantity(db, product.id, quantity);
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.back();
@@ -121,7 +179,8 @@ export default function ConfirmScreen() {
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: colors.background }}
-      contentContainerStyle={{ padding: 16, gap: 20 }}
+      contentContainerStyle={{ padding: 16, gap: 16 }}
+      keyboardShouldPersistTaps="handled"
     >
       {/* Product info */}
       <View
@@ -203,29 +262,12 @@ export default function ConfirmScreen() {
         </Pressable>
       </View>
 
-      {/* Quantity */}
-      <View
-        style={{
-          backgroundColor: colors.card,
-          borderRadius: 14,
-          borderCurve: "continuous",
-          padding: 16,
-        }}
-      >
-        <Text
-          style={{
-            fontSize: 15,
-            fontWeight: "600",
-            color: colors.textSecondary,
-            marginBottom: 12,
-          }}
-        >
-          Quantité
-        </Text>
+      {/* Quantity — compact centered */}
+      <View style={{ alignItems: "center" }}>
         <QuantityInput value={quantity} onChange={setQuantity} />
       </View>
 
-      {/* Meal selector */}
+      {/* Nutrition — all values with edit toggle */}
       <View
         style={{
           backgroundColor: colors.card,
@@ -234,27 +276,12 @@ export default function ConfirmScreen() {
           padding: 16,
         }}
       >
-        <Text
-          style={{
-            fontSize: 15,
-            fontWeight: "600",
-            color: colors.textSecondary,
-            marginBottom: 12,
-          }}
-        >
-          Repas
-        </Text>
-        <MealSelector value={selectedMeal} onChange={setSelectedMeal} wrap />
-      </View>
-
-      {/* Nutrition preview */}
-      {calculated && (
         <View
           style={{
-            backgroundColor: colors.card,
-            borderRadius: 14,
-            borderCurve: "continuous",
-            padding: 16,
+            flexDirection: "row",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginBottom: 12,
           }}
         >
           <Text
@@ -262,60 +289,155 @@ export default function ConfirmScreen() {
               fontSize: 15,
               fontWeight: "600",
               color: colors.textSecondary,
-              marginBottom: 12,
             }}
           >
-            Apport pour {quantity}g
+            {editing ? "Valeurs pour 100g" : `Apport pour ${quantity}g`}
           </Text>
+          <Pressable
+            onPress={() => {
+              if (editing) {
+                handleSaveEdit();
+              } else {
+                setEditing(true);
+              }
+            }}
+            hitSlop={8}
+          >
+            <Text
+              style={{
+                fontSize: 14,
+                fontWeight: "600",
+                color: colors.accent.calories,
+              }}
+            >
+              {editing ? "Enregistrer" : "Modifier"}
+            </Text>
+          </Pressable>
+        </View>
+
+        {editing ? (
+          <View style={{ gap: 10 }}>
+            <EditRow
+              label="Calories"
+              unit="kcal"
+              value={editValues.calories}
+              onChange={(v) => setEditValues((p) => ({ ...p, calories: v }))}
+              colors={colors}
+            />
+            <EditRow
+              label="Protéines"
+              unit="g"
+              value={editValues.proteins}
+              onChange={(v) => setEditValues((p) => ({ ...p, proteins: v }))}
+              colors={colors}
+            />
+            <EditRow
+              label="Glucides"
+              unit="g"
+              value={editValues.carbs}
+              onChange={(v) => setEditValues((p) => ({ ...p, carbs: v }))}
+              colors={colors}
+            />
+            <EditRow
+              label="Lipides"
+              unit="g"
+              value={editValues.fats}
+              onChange={(v) => setEditValues((p) => ({ ...p, fats: v }))}
+              colors={colors}
+            />
+            <EditRow
+              label="Fibres"
+              unit="g"
+              value={editValues.fiber}
+              onChange={(v) => setEditValues((p) => ({ ...p, fiber: v }))}
+              colors={colors}
+              optional
+            />
+            <EditRow
+              label="Sucres"
+              unit="g"
+              value={editValues.sugars}
+              onChange={(v) => setEditValues((p) => ({ ...p, sugars: v }))}
+              colors={colors}
+              optional
+            />
+            <EditRow
+              label="Graisses sat."
+              unit="g"
+              value={editValues.saturated_fat}
+              onChange={(v) =>
+                setEditValues((p) => ({ ...p, saturated_fat: v }))
+              }
+              colors={colors}
+              optional
+            />
+            <EditRow
+              label="Sel"
+              unit="g"
+              value={editValues.salt}
+              onChange={(v) => setEditValues((p) => ({ ...p, salt: v }))}
+              colors={colors}
+              optional
+            />
+          </View>
+        ) : (
           <View style={{ gap: 8 }}>
             <NutritionRow
               label="Calories"
-              value={`${Math.round(calculated.calories)} kcal`}
+              value={`${Math.round(calculated?.calories ?? 0)} kcal`}
               color={colors.accent.calories}
             />
             <NutritionRow
               label="Protéines"
-              value={`${calculated.proteins.toFixed(1)} g`}
+              value={`${(calculated?.proteins ?? 0).toFixed(1)} g`}
               color={colors.accent.proteins}
             />
             <NutritionRow
               label="Glucides"
-              value={`${calculated.carbs.toFixed(1)} g`}
+              value={`${(calculated?.carbs ?? 0).toFixed(1)} g`}
               color={colors.accent.carbs}
             />
             <NutritionRow
               label="Lipides"
-              value={`${calculated.fats.toFixed(1)} g`}
+              value={`${(calculated?.fats ?? 0).toFixed(1)} g`}
               color={colors.accent.fats}
             />
+            {calculated?.fiber != null && (
+              <NutritionRow
+                label="Fibres"
+                value={`${calculated.fiber.toFixed(1)} g`}
+                color={colors.textMuted}
+              />
+            )}
+            {calculated?.sugars != null && (
+              <NutritionRow
+                label="Sucres"
+                value={`${calculated.sugars.toFixed(1)} g`}
+                color={colors.textMuted}
+              />
+            )}
+            {calculated?.saturated_fat != null && (
+              <NutritionRow
+                label="Graisses sat."
+                value={`${calculated.saturated_fat.toFixed(1)} g`}
+                color={colors.textMuted}
+              />
+            )}
+            {calculated?.salt != null && (
+              <NutritionRow
+                label="Sel"
+                value={`${calculated.salt.toFixed(1)} g`}
+                color={colors.textMuted}
+              />
+            )}
           </View>
-        </View>
-      )}
+        )}
+      </View>
 
-      {/* Edit nutrition button */}
-      <Pressable
-        onPress={() => router.push(`/product/${product.id}`)}
-        style={({ pressed }) => ({
-          backgroundColor: colors.card,
-          paddingVertical: 14,
-          borderRadius: 12,
-          borderCurve: "continuous",
-          alignItems: "center",
-          borderWidth: 1,
-          borderColor: colors.separator,
-          opacity: pressed ? 0.7 : 1,
-        })}
-      >
-        <Text
-          style={{
-            color: colors.textPrimary,
-            fontSize: 16,
-            fontWeight: "500",
-          }}
-        >
-          Modifier les valeurs
-        </Text>
-      </Pressable>
+      {/* Meal selector — centered, just above button */}
+      <View style={{ alignItems: "center" }}>
+        <MealSelector value={selectedMeal} onChange={setSelectedMeal} wrap />
+      </View>
 
       {/* Add button */}
       <Pressable
@@ -374,6 +496,65 @@ function NutritionRow({ label, value, color }: NutritionRowProps) {
       >
         {value}
       </Text>
+    </View>
+  );
+}
+
+interface EditRowProps {
+  label: string;
+  unit: string;
+  value: string;
+  onChange: (v: string) => void;
+  colors: ReturnType<typeof useThemeColors>;
+  optional?: boolean;
+}
+
+function EditRow({
+  label,
+  unit,
+  value,
+  onChange,
+  colors,
+  optional,
+}: EditRowProps) {
+  return (
+    <View
+      style={{
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+      }}
+    >
+      <Text style={{ fontSize: 14, color: colors.textSecondary, flex: 1 }}>
+        {label}
+        {optional ? " (opt.)" : ""}
+      </Text>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+        <TextInput
+          value={value}
+          onChangeText={onChange}
+          keyboardType="decimal-pad"
+          placeholder={optional ? "—" : "0"}
+          placeholderTextColor={colors.textMuted}
+          style={{
+            color: colors.textPrimary,
+            fontSize: 14,
+            fontWeight: "600",
+            textAlign: "right",
+            minWidth: 50,
+            paddingVertical: 4,
+            paddingHorizontal: 8,
+            backgroundColor: colors.isDark
+              ? "rgba(255,255,255,0.06)"
+              : "rgba(0,0,0,0.04)",
+            borderRadius: 6,
+            fontVariant: ["tabular-nums"],
+          }}
+        />
+        <Text style={{ fontSize: 13, color: colors.textMuted, minWidth: 28 }}>
+          {unit}
+        </Text>
+      </View>
     </View>
   );
 }
