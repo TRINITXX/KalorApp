@@ -760,9 +760,8 @@ export default function ProductDetailScreen() {
         />
       </View>
 
-      {/* Modifier button — only for manual products */}
-      {product.source === "manual" ? (
-        <Pressable
+      {/* Modifier button */}
+      <Pressable
           onPress={() => setIsEditing(true)}
           style={({ pressed }) => ({
             backgroundColor: colors.card,
@@ -782,10 +781,9 @@ export default function ProductDetailScreen() {
               fontWeight: "500",
             }}
           >
-            Modifier
+            Modifier les valeurs nutritionnelles
           </Text>
         </Pressable>
-      ) : null}
 
       {/* Add entry button */}
       <Pressable
