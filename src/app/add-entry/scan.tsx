@@ -30,6 +30,7 @@ export default function ScanScreen() {
   const scanLock = useRef(false);
   const [torch, setTorch] = useState(false);
   const [autoFocus, setAutoFocus] = useState<"on" | "off">("on");
+  const [focusing, setFocusing] = useState(false);
   const cameraRef = useRef<CameraView>(null);
 
   const lookupEan = useCallback(
@@ -197,11 +198,35 @@ export default function ScanScreen() {
       <Pressable
         style={styles.overlay}
         onPress={() => {
+          setFocusing(true);
           setAutoFocus("off");
-          setTimeout(() => setAutoFocus("on"), 50);
+          setTimeout(() => {
+            setAutoFocus("on");
+            setTimeout(() => setFocusing(false), 600);
+          }, 50);
         }}
       >
-        <View style={styles.scanArea} />
+        <View
+          style={[
+            styles.scanArea,
+            focusing && {
+              borderColor: "#4ade80",
+              borderWidth: 3,
+            },
+          ]}
+        />
+        {focusing && (
+          <Text
+            style={{
+              color: "#4ade80",
+              fontSize: 13,
+              fontWeight: "600",
+              marginTop: 12,
+            }}
+          >
+            Mise au point...
+          </Text>
+        )}
       </Pressable>
 
       {/* Top bar — back + flash */}
