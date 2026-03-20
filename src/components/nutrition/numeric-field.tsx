@@ -35,7 +35,7 @@ export function NumericField({
         {optional ? " (optionnel)" : ""}
       </Text>
       <TextInput
-        value={value}
+        defaultValue={value}
         onChangeText={onChangeText}
         onBlur={onBlur}
         keyboardType="decimal-pad"

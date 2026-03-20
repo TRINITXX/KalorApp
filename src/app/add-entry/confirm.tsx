@@ -574,7 +574,7 @@ function EditRow({
       </Text>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
         <TextInput
-          value={value}
+          defaultValue={value}
           onChangeText={onChange}
           keyboardType="decimal-pad"
           selectTextOnFocus
