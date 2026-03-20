@@ -8,9 +8,14 @@ interface WidgetBridgeModule {
 
 const isIOS = Platform.OS === "ios";
 
-const NativeModule: WidgetBridgeModule | null = isIOS
-  ? requireNativeModule("WidgetBridge")
-  : null;
+let NativeModule: WidgetBridgeModule | null = null;
+if (isIOS) {
+  try {
+    NativeModule = requireNativeModule("WidgetBridge");
+  } catch {
+    // Module not available in old dev builds — safe to ignore
+  }
+}
 
 export function getSharedContainerPath(): string | null {
   return NativeModule?.getSharedContainerPath() ?? null;
