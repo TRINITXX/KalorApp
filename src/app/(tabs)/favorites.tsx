@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 import { useRouter } from "expo-router";
+import { useFocusEffect } from "expo-router";
 import { Image, type ImageStyle } from "expo-image";
 import { SymbolView } from "expo-symbols";
 
@@ -20,9 +21,11 @@ export default function FavoritesScreen() {
     setFavorites(data);
   }, [db]);
 
-  useEffect(() => {
-    loadFavorites();
-  }, [loadFavorites]);
+  useFocusEffect(
+    useCallback(() => {
+      loadFavorites();
+    }, [loadFavorites]),
+  );
 
   const handleRemove = useCallback(
     async (productId: string, productName: string) => {
@@ -51,8 +54,30 @@ export default function FavoritesScreen() {
       contentContainerStyle={{ padding: 16, gap: 8 }}
       contentInsetAdjustmentBehavior="automatic"
     >
+      {/* Action buttons */}
+      <View style={{ gap: 8, marginBottom: 8 }}>
+        <ActionButton
+          icon="barcode.viewfinder"
+          label="Scanner un produit"
+          onPress={() => router.push("/add-entry/scan")}
+          colors={colors}
+        />
+        <ActionButton
+          icon="magnifyingglass"
+          label="Rechercher un produit"
+          onPress={() => router.push("/add-entry/search")}
+          colors={colors}
+        />
+        <ActionButton
+          icon="square.and.pencil"
+          label="Saisie manuelle"
+          onPress={() => router.push("/add-entry/manual")}
+          colors={colors}
+        />
+      </View>
+
       {favorites.length === 0 && (
-        <View style={{ alignItems: "center", marginTop: 48, gap: 12 }}>
+        <View style={{ alignItems: "center", marginTop: 32, gap: 12 }}>
           <SymbolView name="heart" tintColor={colors.textMuted} size={40} />
           <Text
             style={{
@@ -168,5 +193,46 @@ export default function FavoritesScreen() {
         </View>
       ))}
     </ScrollView>
+  );
+}
+
+interface ActionButtonProps {
+  icon: string;
+  label: string;
+  onPress: () => void;
+  colors: ReturnType<typeof useThemeColors>;
+}
+
+function ActionButton({ icon, label, onPress, colors }: ActionButtonProps) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => ({
+        flexDirection: "row",
+        alignItems: "center",
+        backgroundColor: colors.card,
+        borderRadius: 14,
+        borderCurve: "continuous",
+        paddingVertical: 14,
+        paddingHorizontal: 16,
+        opacity: pressed ? 0.7 : 1,
+      })}
+    >
+      <SymbolView
+        name={icon as never}
+        size={20}
+        tintColor={colors.accent.calories}
+      />
+      <Text
+        style={{
+          fontSize: 15,
+          fontWeight: "600",
+          color: colors.textPrimary,
+          marginLeft: 12,
+        }}
+      >
+        {label}
+      </Text>
+    </Pressable>
   );
 }
