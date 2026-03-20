@@ -78,8 +78,8 @@ export default function AddEntryScreen() {
       style={{ flex: 1, backgroundColor: colors.background }}
       contentContainerStyle={{ padding: 16, gap: 12 }}
     >
-      {/* 2x2 grid */}
-      <View style={{ flexDirection: "row", gap: 10 }}>
+      {/* 4x1 row */}
+      <View style={{ flexDirection: "row", gap: 8 }}>
         <ActionButton
           icon="barcode.viewfinder"
           label="Scanner"
@@ -92,17 +92,15 @@ export default function AddEntryScreen() {
           onPress={() => router.push("/add-entry/search")}
           colors={colors}
         />
-      </View>
-      <View style={{ flexDirection: "row", gap: 10 }}>
         <ActionButton
           icon="bolt.fill"
-          label="Repas rapide"
+          label="Rapide"
           onPress={() => router.push("/add-entry/quick-meal")}
           colors={colors}
         />
         <ActionButton
           icon="square.and.pencil"
-          label="Saisie manuelle"
+          label="Manuel"
           onPress={() => router.push("/add-entry/manual")}
           colors={colors}
         />
