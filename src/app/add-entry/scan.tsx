@@ -193,10 +193,16 @@ export default function ScanScreen() {
         onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
       />
 
-      {/* Overlay */}
-      <View style={styles.overlay}>
+      {/* Overlay — tap to refocus */}
+      <Pressable
+        style={styles.overlay}
+        onPress={() => {
+          setAutoFocus("off");
+          setTimeout(() => setAutoFocus("on"), 50);
+        }}
+      >
         <View style={styles.scanArea} />
-      </View>
+      </Pressable>
 
       {/* Top bar — back + flash */}
       <View style={styles.topBar}>
