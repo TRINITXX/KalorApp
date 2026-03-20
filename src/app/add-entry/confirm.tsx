@@ -576,7 +576,7 @@ function EditRow({
         <TextInput
           value={value}
           onChangeText={onChange}
-          keyboardType="numbers-and-punctuation"
+          keyboardType="decimal-pad"
           selectTextOnFocus
           placeholder={optional ? "—" : "0"}
           placeholderTextColor={colors.textMuted}

@@ -38,7 +38,7 @@ export function NumericField({
         value={value}
         onChangeText={onChangeText}
         onBlur={onBlur}
-        keyboardType="numbers-and-punctuation"
+        keyboardType="decimal-pad"
         selectTextOnFocus
         placeholder="0"
         placeholderTextColor={colors.textMuted}
