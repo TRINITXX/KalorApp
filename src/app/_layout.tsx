@@ -59,7 +59,10 @@ export default function RootLayout() {
           },
         }}
       >
-        <Stack.Screen name="(tabs)" />
+        <Stack.Screen
+          name="(tabs)"
+          options={{ headerShown: false, title: "" }}
+        />
         <Stack.Screen
           name="add-entry"
           options={{
