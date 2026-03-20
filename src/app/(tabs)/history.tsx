@@ -395,17 +395,6 @@ function WeekView() {
           padding: SPACING.lg,
         }}
       >
-        <Text
-          style={{
-            fontSize: 13,
-            fontWeight: "500",
-            color: colors.textMuted,
-            marginBottom: SPACING.md,
-          }}
-        >
-          Calories par jour
-        </Text>
-
         <SimpleBarChart
           data={weekData.map((d) => ({ label: d.label, value: d.calories }))}
           maxValue={maxCal}
