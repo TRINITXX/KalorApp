@@ -63,9 +63,8 @@ export default function RootLayout() {
         <Stack.Screen
           name="add-entry"
           options={{
-            presentation: "formSheet",
-            sheetGrabberVisible: true,
-            sheetAllowedDetents: [0.75, 1.0],
+            presentation: "fullScreenModal",
+            headerShown: false,
           }}
         />
         <Stack.Screen name="product/[id]" options={{ headerShown: true }} />
