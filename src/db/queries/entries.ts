@@ -2,6 +2,7 @@ import type { SQLiteDatabase } from "expo-sqlite";
 
 import type { EntryRow } from "@/types/database";
 import type { MealType } from "@/types/nutrition";
+import { syncWidgetData } from "@/lib/widget-sync";
 
 export interface AddEntryParams {
   product_id: string;
@@ -40,6 +41,7 @@ export async function addEntry(
     entry.saturated_fat,
     entry.salt,
   );
+  syncWidgetData(db).catch(() => {});
   return result.lastInsertRowId;
 }
 
@@ -48,6 +50,7 @@ export async function deleteEntry(
   id: number,
 ): Promise<void> {
   await db.runAsync("DELETE FROM entries WHERE id = ?", id);
+  syncWidgetData(db).catch(() => {});
 }
 
 export async function getEntriesByDate(
