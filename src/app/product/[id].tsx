@@ -785,22 +785,6 @@ export default function ProductDetailScreen() {
           </Text>
         </Pressable>
 
-      {/* Add entry button */}
-      <Pressable
-        onPress={() => router.push(`/add-entry/confirm?productId=${id}`)}
-        style={({ pressed }) => ({
-          backgroundColor: colors.accent.calories,
-          paddingVertical: 14,
-          borderRadius: 12,
-          borderCurve: "continuous",
-          alignItems: "center",
-          opacity: pressed ? 0.7 : 1,
-        })}
-      >
-        <Text style={{ color: "#fff", fontSize: 16, fontWeight: "600" }}>
-          Ajouter une entrée
-        </Text>
-      </Pressable>
     </ScrollView>
   );
 }
