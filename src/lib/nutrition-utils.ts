@@ -27,12 +27,7 @@ export function formatNumber(value: number, decimals: number = 1): string {
 }
 
 export function getMealForTime(hour: number): MealType {
-  for (const [meal, range] of Object.entries(MEAL_TIME_RANGES)) {
-    if (hour >= range.start && hour < range.end) {
-      return meal as MealType;
-    }
-  }
-  return "dinner";
+  return hour < 17 ? "lunch" : "dinner";
 }
 
 export function exportEntriesCsv(

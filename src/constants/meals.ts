@@ -11,8 +11,8 @@ export const MEAL_TIME_RANGES: Record<
   MealType,
   { start: number; end: number }
 > = {
-  breakfast: { start: 0, end: 11 },
-  lunch: { start: 11, end: 14 },
-  snack: { start: 14, end: 17 },
+  breakfast: { start: 5, end: 10 },
+  lunch: { start: 10, end: 17 },
+  snack: { start: -1, end: -1 },
   dinner: { start: 17, end: 24 },
 };

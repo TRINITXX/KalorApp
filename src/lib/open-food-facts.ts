@@ -69,10 +69,20 @@ async function fetchWithTimeout(
   throw new Error("Unreachable");
 }
 
+const PRODUCT_FIELDS = [
+  "code",
+  "product_name",
+  "brands",
+  "image_front_url",
+  "nutriments",
+].join(",");
+
 export async function fetchProduct(
   ean: string,
 ): Promise<Omit<Product, "created_at"> | null> {
-  const response = await fetchWithTimeout(`${BASE_URL}/api/v2/product/${ean}`);
+  const response = await fetchWithTimeout(
+    `${BASE_URL}/api/v2/product/${ean}?fields=${PRODUCT_FIELDS}`,
+  );
   const data: OFFResponse = await response.json();
   return parseProduct(data);
 }
@@ -82,18 +92,29 @@ export interface SearchResult {
   name: string;
   brand: string | null;
   image_url: string | null;
+  calories: number | null;
 }
+
+const SEARCH_FIELDS = [
+  "code",
+  "product_name",
+  "brands",
+  "image_front_small_url",
+  "nutriments",
+].join(",");
 
 export async function searchProducts(query: string): Promise<SearchResult[]> {
   const encoded = encodeURIComponent(query);
   const response = await fetchWithTimeout(
-    `${BASE_URL}/cgi/search.pl?search_terms=${encoded}&json=true&page_size=20`,
+    `${BASE_URL}/cgi/search.pl?search_terms=${encoded}&json=true&page_size=20&fields=${SEARCH_FIELDS}`,
   );
   const data = await response.json();
-  return (data.products ?? []).map((p: Record<string, string>) => ({
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (data.products ?? []).map((p: any) => ({
     id: p.code,
     name: p.product_name ?? "Unknown",
     brand: p.brands ?? null,
     image_url: p.image_front_small_url ?? null,
+    calories: p.nutriments?.["energy-kcal_100g"] ?? null,
   }));
 }
