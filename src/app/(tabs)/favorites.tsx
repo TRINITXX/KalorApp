@@ -20,6 +20,7 @@ export default function FavoritesScreen() {
   const db = useDb();
   const colors = useThemeColors();
   const [favorites, setFavorites] = useState<FavoriteWithProduct[]>([]);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const loadFavorites = useCallback(async () => {
     const data = await getFavorites(db);
@@ -98,131 +99,144 @@ export default function FavoritesScreen() {
         </View>
       )}
 
-      {favorites.map((fav) => (
-        <View
-          key={fav.id}
-          style={{
-            backgroundColor: colors.card,
-            borderRadius: 12,
-            borderCurve: "continuous",
-            padding: 12,
-            gap: 10,
-          }}
-        >
-          {/* Top row: image + info + remove */}
+      {favorites.map((fav) => {
+        const isExpanded = expandedId === fav.id;
+        return (
           <View
+            key={fav.id}
             style={{
-              flexDirection: "row",
-              alignItems: "center",
-              gap: 12,
+              backgroundColor: colors.card,
+              borderRadius: 12,
+              borderCurve: "continuous",
+              overflow: "hidden",
             }}
           >
-            {fav.image_url ? (
-              <Image
-                source={{ uri: fav.image_url }}
-                style={
-                  {
+            {/* Main row — tap to expand */}
+            <Pressable
+              onPress={() => setExpandedId(isExpanded ? null : fav.id)}
+              style={({ pressed }) => ({
+                flexDirection: "row",
+                alignItems: "center",
+                padding: 12,
+                gap: 12,
+                opacity: pressed ? 0.7 : 1,
+              })}
+            >
+              {fav.image_url ? (
+                <Image
+                  source={{ uri: fav.image_url }}
+                  style={
+                    {
+                      width: 48,
+                      height: 48,
+                      borderRadius: 10,
+                      borderCurve: "continuous",
+                    } as unknown as ImageStyle
+                  }
+                  contentFit="cover"
+                  transition={200}
+                />
+              ) : (
+                <View
+                  style={{
                     width: 48,
                     height: 48,
                     borderRadius: 10,
                     borderCurve: "continuous",
-                  } as unknown as ImageStyle
-                }
-                contentFit="cover"
-                transition={200}
-              />
-            ) : (
-              <View
-                style={{
-                  width: 48,
-                  height: 48,
-                  borderRadius: 10,
-                  borderCurve: "continuous",
-                  backgroundColor: colors.isDark
-                    ? "rgba(255,255,255,0.08)"
-                    : "rgba(0,0,0,0.05)",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                <Text style={{ fontSize: 22, color: colors.textMuted }}>?</Text>
-              </View>
-            )}
+                    backgroundColor: colors.isDark
+                      ? "rgba(255,255,255,0.08)"
+                      : "rgba(0,0,0,0.05)",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <Text style={{ fontSize: 22, color: colors.textMuted }}>
+                    ?
+                  </Text>
+                </View>
+              )}
 
-            <Pressable
-              onPress={() => router.push(`/product/${fav.id}`)}
-              style={{ flex: 1 }}
-            >
-              <Text
-                style={{
-                  fontSize: 15,
-                  fontWeight: "600",
-                  color: colors.textPrimary,
-                }}
-                numberOfLines={1}
-              >
-                {fav.name}
-              </Text>
-              {fav.brand ? (
+              <View style={{ flex: 1 }}>
                 <Text
                   style={{
-                    fontSize: 13,
-                    color: colors.textSecondary,
-                    marginTop: 2,
+                    fontSize: 15,
+                    fontWeight: "600",
+                    color: colors.textPrimary,
                   }}
                   numberOfLines={1}
                 >
-                  {fav.brand}
+                  {fav.name}
                 </Text>
-              ) : null}
+                {fav.brand ? (
+                  <Text
+                    style={{
+                      fontSize: 13,
+                      color: colors.textSecondary,
+                      marginTop: 2,
+                    }}
+                    numberOfLines={1}
+                  >
+                    {fav.brand}
+                  </Text>
+                ) : null}
+                <Text
+                  style={{
+                    fontSize: 12,
+                    color: colors.textMuted,
+                    marginTop: 2,
+                    fontVariant: ["tabular-nums"],
+                  }}
+                >
+                  {fav.favorite_quantity ?? fav.last_quantity}g
+                </Text>
+              </View>
+
+              <Pressable
+                onPress={() => handleRemove(fav.id, fav.name)}
+                hitSlop={8}
+                style={{ padding: 4 }}
+              >
+                <SymbolView
+                  name="heart.fill"
+                  size={22}
+                  tintColor={colors.accent.error}
+                />
+              </Pressable>
             </Pressable>
 
-            <Pressable
-              onPress={() => handleRemove(fav.id, fav.name)}
-              hitSlop={8}
-              style={{ padding: 4 }}
-            >
-              <SymbolView
-                name="heart.fill"
-                size={22}
-                tintColor={colors.accent.error}
-              />
-            </Pressable>
+            {/* Expanded: quantity input */}
+            {isExpanded && (
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  paddingHorizontal: 12,
+                  paddingBottom: 12,
+                  paddingTop: 4,
+                  borderTopWidth: 1,
+                  borderTopColor: colors.separator,
+                }}
+              >
+                <Text style={{ fontSize: 13, color: colors.textMuted }}>
+                  Quantite par defaut
+                </Text>
+                <QuantityInput
+                  value={fav.favorite_quantity ?? fav.last_quantity}
+                  onChange={(v) => {
+                    updateFavoriteQuantity(db, fav.id, v);
+                    setFavorites((prev) =>
+                      prev.map((f) =>
+                        f.id === fav.id ? { ...f, favorite_quantity: v } : f,
+                      ),
+                    );
+                  }}
+                />
+              </View>
+            )}
           </View>
-
-          {/* Bottom row: quantity */}
-          <View
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              justifyContent: "space-between",
-              paddingTop: 4,
-              borderTopWidth: 1,
-              borderTopColor: colors.separator,
-            }}
-          >
-            <Text
-              style={{
-                fontSize: 13,
-                color: colors.textMuted,
-              }}
-            >
-              Quantite par defaut
-            </Text>
-            <QuantityInput
-              value={fav.favorite_quantity ?? fav.last_quantity}
-              onChange={(v) => {
-                updateFavoriteQuantity(db, fav.id, v);
-                setFavorites((prev) =>
-                  prev.map((f) =>
-                    f.id === fav.id ? { ...f, favorite_quantity: v } : f,
-                  ),
-                );
-              }}
-            />
-          </View>
-        </View>
-      ))}
+        );
+      })}
     </ScrollView>
   );
 }
