@@ -543,6 +543,7 @@ function EditRow({
           value={value}
           onChangeText={onChange}
           keyboardType="decimal-pad"
+          selectTextOnFocus
           placeholder={optional ? "—" : "0"}
           placeholderTextColor={colors.textMuted}
           style={{

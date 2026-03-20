@@ -39,6 +39,7 @@ export function NumericField({
         onChangeText={onChangeText}
         onBlur={onBlur}
         keyboardType="decimal-pad"
+        selectTextOnFocus
         placeholder="0"
         placeholderTextColor={colors.textMuted}
         style={{

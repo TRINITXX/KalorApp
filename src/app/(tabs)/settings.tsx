@@ -211,6 +211,7 @@ function GoalsSection({ colors }: GoalsSectionProps) {
                 }
                 onBlur={() => handleBlur(goal.key)}
                 keyboardType="numeric"
+                selectTextOnFocus
                 placeholder="—"
                 placeholderTextColor={colors.textMuted}
                 style={{
