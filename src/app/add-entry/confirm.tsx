@@ -263,7 +263,16 @@ export default function ConfirmScreen() {
       </View>
 
       {/* Quantity — compact centered */}
-      <View style={{ alignItems: "center" }}>
+      <View style={{ alignItems: "center", gap: 6 }}>
+        <Text
+          style={{
+            fontSize: 15,
+            fontWeight: "600",
+            color: colors.textSecondary,
+          }}
+        >
+          Quantité
+        </Text>
         <QuantityInput value={quantity} onChange={setQuantity} />
       </View>
 
@@ -291,7 +300,7 @@ export default function ConfirmScreen() {
               color: colors.textSecondary,
             }}
           >
-            {editing ? "Valeurs pour 100g" : `Apport pour ${quantity}g`}
+            Valeurs pour 100g
           </Text>
           <Pressable
             onPress={() => {
@@ -384,49 +393,49 @@ export default function ConfirmScreen() {
           <View style={{ gap: 8 }}>
             <NutritionRow
               label="Calories"
-              value={`${Math.round(calculated?.calories ?? 0)} kcal`}
+              value={`${Math.round(product.calories)} kcal`}
               color={colors.accent.calories}
             />
             <NutritionRow
               label="Protéines"
-              value={`${(calculated?.proteins ?? 0).toFixed(1)} g`}
+              value={`${product.proteins.toFixed(1)} g`}
               color={colors.accent.proteins}
             />
             <NutritionRow
               label="Glucides"
-              value={`${(calculated?.carbs ?? 0).toFixed(1)} g`}
+              value={`${product.carbs.toFixed(1)} g`}
               color={colors.accent.carbs}
             />
             <NutritionRow
               label="Lipides"
-              value={`${(calculated?.fats ?? 0).toFixed(1)} g`}
+              value={`${product.fats.toFixed(1)} g`}
               color={colors.accent.fats}
             />
-            {calculated?.fiber != null && (
+            {product.fiber != null && (
               <NutritionRow
                 label="Fibres"
-                value={`${calculated.fiber.toFixed(1)} g`}
+                value={`${product.fiber.toFixed(1)} g`}
                 color={colors.textMuted}
               />
             )}
-            {calculated?.sugars != null && (
+            {product.sugars != null && (
               <NutritionRow
                 label="Sucres"
-                value={`${calculated.sugars.toFixed(1)} g`}
+                value={`${product.sugars.toFixed(1)} g`}
                 color={colors.textMuted}
               />
             )}
-            {calculated?.saturated_fat != null && (
+            {product.saturated_fat != null && (
               <NutritionRow
                 label="Graisses sat."
-                value={`${calculated.saturated_fat.toFixed(1)} g`}
+                value={`${product.saturated_fat.toFixed(1)} g`}
                 color={colors.textMuted}
               />
             )}
-            {calculated?.salt != null && (
+            {product.salt != null && (
               <NutritionRow
                 label="Sel"
-                value={`${calculated.salt.toFixed(1)} g`}
+                value={`${product.salt.toFixed(1)} g`}
                 color={colors.textMuted}
               />
             )}
