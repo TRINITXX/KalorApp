@@ -20,6 +20,7 @@ export default function AddEntryLayout() {
       <Stack.Screen name="search" options={{ title: "Rechercher" }} />
       <Stack.Screen name="manual" options={{ title: "Saisie manuelle" }} />
       <Stack.Screen name="confirm" options={{ title: "Confirmer" }} />
+      <Stack.Screen name="quick-meal" options={{ title: "Repas rapide" }} />
     </Stack>
   );
 }

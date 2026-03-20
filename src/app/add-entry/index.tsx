@@ -83,6 +83,12 @@ export default function AddEntryScreen() {
         colors={colors}
       />
       <ActionButton
+        icon="bolt.fill"
+        label="Repas rapide"
+        onPress={() => router.push("/add-entry/quick-meal")}
+        colors={colors}
+      />
+      <ActionButton
         icon="square.and.pencil"
         label="Saisie manuelle"
         onPress={() => router.push("/add-entry/manual")}
