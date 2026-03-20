@@ -91,7 +91,7 @@ export default function ConfirmScreen() {
 
       await updateLastQuantity(db, product.id, quantity);
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      router.dismissAll();
+      router.back();
     } catch {
       Alert.alert(
         "Erreur",
@@ -339,10 +339,11 @@ function NutritionRow({ label, value, color }: NutritionRowProps) {
         <Text style={{ fontSize: 14, color: "#999" }}>{label}</Text>
       </View>
       <Text
+        selectable
         style={{
           fontSize: 14,
           fontWeight: "600",
-          color: "#fff",
+          color,
           fontVariant: ["tabular-nums"],
         }}
       >

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -6,7 +6,7 @@ import {
   Text,
   View,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import { Image, type ImageStyle } from "expo-image";
 import { SymbolView } from "expo-symbols";
 import * as Haptics from "expo-haptics";
@@ -79,17 +79,22 @@ export default function AddEntryScreen() {
   const loadFavorites = useCallback(async () => {
     const data = await getFavorites(db);
     setFavorites(data);
-    const initialQuantities: Record<string, number> = {};
-    for (const fav of data) {
-      initialQuantities[fav.id] =
-        (fav.favorite_quantity ?? fav.last_quantity) || 100;
-    }
-    setQuantities(initialQuantities);
+    setQuantities((prev) => {
+      const next: Record<string, number> = { ...prev };
+      for (const fav of data) {
+        if (!(fav.id in next)) {
+          next[fav.id] = (fav.favorite_quantity ?? fav.last_quantity) || 100;
+        }
+      }
+      return next;
+    });
   }, [db]);
 
-  useEffect(() => {
-    loadFavorites();
-  }, [loadFavorites]);
+  useFocusEffect(
+    useCallback(() => {
+      loadFavorites();
+    }, [loadFavorites]),
+  );
 
   const toggleSelection = useCallback((id: string) => {
     setSelectedIds((prev) => {
