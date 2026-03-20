@@ -35,11 +35,11 @@ struct FavoriteEntityQuery: EntityQuery {
 
 struct QuickMealIntent: AppIntent {
     static var title: LocalizedStringResource = "Ajouter un repas rapide"
-    static var description: IntentDescription = "Ajoute plusieurs aliments favoris en un seul repas"
+    static var description: IntentDescription = "Ajoute tous les aliments favoris en un seul repas"
     static var openAppWhenRun = false
 
     @Parameter(title: "Aliments")
-    var selectedFavorites: [FavoriteEntity]
+    var selectedFavorites: [FavoriteEntity]?
 
     func perform() async throws -> some IntentResult & ProvidesDialog {
         guard let helper = SQLiteHelper() else {
@@ -47,6 +47,24 @@ struct QuickMealIntent: AppIntent {
         }
 
         let allFavorites = helper.getFavorites()
+
+        guard !allFavorites.isEmpty else {
+            return .result(dialog: "Aucun favori. Ajoutez des favoris dans KalorApp d'abord.")
+        }
+
+        let itemsToAdd: [SQLiteHelper.FavoriteProduct]
+        if let selected = selectedFavorites, !selected.isEmpty {
+            itemsToAdd = selected.compactMap { entity in
+                allFavorites.first(where: { $0.id == entity.id })
+            }
+        } else {
+            itemsToAdd = allFavorites
+        }
+
+        guard !itemsToAdd.isEmpty else {
+            return .result(dialog: "Aucun aliment a ajouter")
+        }
+
         let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "yyyy-MM-dd"
         let today = dateFormatter.string(from: Date())
@@ -55,8 +73,7 @@ struct QuickMealIntent: AppIntent {
 
         var totalCalories: Double = 0
 
-        for entity in selectedFavorites {
-            guard let product = allFavorites.first(where: { $0.id == entity.id }) else { continue }
+        for product in itemsToAdd {
 
             let qty = product.lastQuantity
             let factor = qty / 100.0
@@ -104,7 +121,7 @@ struct QuickMealIntent: AppIntent {
         }
         WidgetCenter.shared.reloadAllTimelines()
 
-        let count = selectedFavorites.count
+        let count = itemsToAdd.count
         return .result(dialog: "\(count) aliment\(count > 1 ? "s" : "") ajout\u{00e9}\(count > 1 ? "s" : "") \u{2014} \(Int(totalCalories)) kcal")
     }
 }
