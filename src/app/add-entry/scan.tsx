@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import {
   Alert,
   Linking,
@@ -8,6 +8,7 @@ import {
   View,
 } from "react-native";
 import { useRouter } from "expo-router";
+import { SymbolView } from "expo-symbols";
 import {
   CameraView,
   useCameraPermissions,
@@ -26,13 +27,14 @@ export default function ScanScreen() {
   const colors = useThemeColors();
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
+  const [torch, setTorch] = useState(false);
+  const cameraRef = useRef<CameraView>(null);
 
   const handleBarCodeScanned = useCallback(
     async ({ data }: BarcodeScanningResult) => {
       if (scanned) return;
       setScanned(true);
 
-      // Check local DB first
       const localProduct = await getProduct(db, data);
       const hasNutrition =
         localProduct &&
@@ -47,7 +49,6 @@ export default function ScanScreen() {
         return;
       }
 
-      // Fetch from OpenFoodFacts (new product or stale cache)
       try {
         const offProduct = await fetchProduct(data);
         if (offProduct) {
@@ -79,7 +80,6 @@ export default function ScanScreen() {
     [db, router, scanned],
   );
 
-  // Permission not yet determined
   if (!permission) {
     return (
       <View style={[styles.centered, { backgroundColor: colors.background }]}>
@@ -90,7 +90,6 @@ export default function ScanScreen() {
     );
   }
 
-  // Permission denied
   if (!permission.granted) {
     return (
       <View style={[styles.centered, { backgroundColor: colors.background }]}>
@@ -128,7 +127,7 @@ export default function ScanScreen() {
               },
             ]}
           >
-            <Text style={styles.buttonText}>Ouvrir les reglages</Text>
+            <Text style={styles.buttonText}>Ouvrir les réglages</Text>
           </Pressable>
         )}
       </View>
@@ -138,8 +137,10 @@ export default function ScanScreen() {
   return (
     <View style={styles.container}>
       <CameraView
+        ref={cameraRef}
         style={StyleSheet.absoluteFillObject}
         facing="back"
+        enableTorch={torch}
         barcodeScannerSettings={{
           barcodeTypes: ["ean13", "ean8"],
         }}
@@ -149,6 +150,45 @@ export default function ScanScreen() {
       {/* Overlay */}
       <View style={styles.overlay}>
         <View style={styles.scanArea} />
+      </View>
+
+      {/* Top bar — back + flash */}
+      <View style={styles.topBar}>
+        <Pressable
+          onPress={() => router.back()}
+          hitSlop={12}
+          style={({ pressed }) => ({
+            width: 40,
+            height: 40,
+            borderRadius: 20,
+            backgroundColor: "rgba(0,0,0,0.4)",
+            alignItems: "center",
+            justifyContent: "center",
+            opacity: pressed ? 0.7 : 1,
+          })}
+        >
+          <SymbolView name="chevron.left" size={18} tintColor="#fff" />
+        </Pressable>
+
+        <Pressable
+          onPress={() => setTorch((t) => !t)}
+          hitSlop={12}
+          style={({ pressed }) => ({
+            width: 40,
+            height: 40,
+            borderRadius: 20,
+            backgroundColor: torch ? "rgba(255,204,0,0.8)" : "rgba(0,0,0,0.4)",
+            alignItems: "center",
+            justifyContent: "center",
+            opacity: pressed ? 0.7 : 1,
+          })}
+        >
+          <SymbolView
+            name={torch ? "flashlight.on.fill" : "flashlight.off.fill"}
+            size={18}
+            tintColor="#fff"
+          />
+        </Pressable>
       </View>
 
       {/* Bottom controls */}
@@ -164,7 +204,7 @@ export default function ScanScreen() {
               },
             ]}
           >
-            <Text style={styles.buttonText}>Scanner a nouveau</Text>
+            <Text style={styles.buttonText}>Scanner à nouveau</Text>
           </Pressable>
         )}
       </View>
@@ -195,6 +235,15 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.6)",
     borderRadius: 16,
     borderCurve: "continuous",
+  },
+  topBar: {
+    position: "absolute",
+    top: 60,
+    left: 16,
+    right: 16,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
   },
   bottomBar: {
     position: "absolute",
