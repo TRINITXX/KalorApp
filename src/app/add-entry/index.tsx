@@ -6,6 +6,8 @@ import { SymbolView } from "expo-symbols";
 import { useDb } from "@/app/_layout";
 import { useThemeColors } from "@/hooks/use-theme-colors";
 import { getRecentProducts } from "@/db/queries/products";
+import { getFavorites } from "@/db/queries/favorites";
+import type { FavoriteWithProduct } from "@/db/queries/favorites";
 import { ProductRow } from "@/components/nutrition/product-row";
 import type { ProductRow as ProductRowType } from "@/types/database";
 
@@ -54,16 +56,21 @@ export default function AddEntryScreen() {
   const router = useRouter();
   const db = useDb();
   const colors = useThemeColors();
+  const [favorites, setFavorites] = useState<FavoriteWithProduct[]>([]);
   const [recentProducts, setRecentProducts] = useState<ProductRowType[]>([]);
 
-  const loadRecents = useCallback(async () => {
-    const products = await getRecentProducts(db, 10);
-    setRecentProducts(products);
+  const loadData = useCallback(async () => {
+    const [favs, recents] = await Promise.all([
+      getFavorites(db),
+      getRecentProducts(db, 10),
+    ]);
+    setFavorites(favs);
+    setRecentProducts(recents);
   }, [db]);
 
   useEffect(() => {
-    loadRecents();
-  }, [loadRecents]);
+    loadData();
+  }, [loadData]);
 
   return (
     <ScrollView
@@ -94,6 +101,53 @@ export default function AddEntryScreen() {
         onPress={() => router.push("/add-entry/manual")}
         colors={colors}
       />
+
+      {favorites.length > 0 && (
+        <View style={{ marginTop: 12 }}>
+          <Text
+            style={{
+              fontSize: 15,
+              fontWeight: "600",
+              color: colors.textSecondary,
+              marginBottom: 8,
+              paddingHorizontal: 4,
+            }}
+          >
+            Favoris
+          </Text>
+          <View
+            style={{
+              backgroundColor: colors.card,
+              borderRadius: 14,
+              borderCurve: "continuous",
+              overflow: "hidden",
+            }}
+          >
+            {favorites.map((fav, index) => (
+              <View key={fav.id}>
+                {index > 0 && (
+                  <View
+                    style={{
+                      height: 1,
+                      backgroundColor: colors.separator,
+                      marginLeft: 68,
+                    }}
+                  />
+                )}
+                <ProductRow
+                  name={fav.name}
+                  brand={fav.brand}
+                  imageUrl={fav.image_url}
+                  calories={fav.calories}
+                  onPress={() =>
+                    router.push(`/add-entry/confirm?productId=${fav.id}`)
+                  }
+                />
+              </View>
+            ))}
+          </View>
+        </View>
+      )}
 
       {recentProducts.length > 0 && (
         <View style={{ marginTop: 12 }}>
