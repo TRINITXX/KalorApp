@@ -67,7 +67,10 @@ export default function RootLayout() {
             headerShown: false,
           }}
         />
-        <Stack.Screen name="product/[id]" options={{ headerShown: true }} />
+        <Stack.Screen
+          name="product/[id]"
+          options={{ headerShown: true, title: "Détail produit" }}
+        />
         <Stack.Screen
           name="quick-add"
           options={{ presentation: "formSheet", sheetGrabberVisible: true }}
