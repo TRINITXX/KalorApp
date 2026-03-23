@@ -14,6 +14,7 @@ import { useDailySummary } from "@/hooks/use-daily-summary";
 import { useThemeColors } from "@/hooks/use-theme-colors";
 import { useSettingsStore } from "@/stores/settings-store";
 import { formatDateISO } from "@/lib/product-utils";
+import type { EntryRow } from "@/types/database";
 import type { MealType } from "@/types/nutrition";
 
 function getFormattedDate(): string {
@@ -55,6 +56,12 @@ export default function DashboardScreen() {
     },
     [db, refresh],
   );
+
+  const handleEdit = useCallback((entry: EntryRow) => {
+    router.push(
+      `/add-entry/confirm?productId=${entry.product_id}&entryId=${entry.id}&entryQuantity=${entry.quantity}`,
+    );
+  }, []);
 
   if (loading) {
     return (
@@ -147,6 +154,7 @@ export default function DashboardScreen() {
             meal={meal.type}
             entries={entriesByMeal[meal.type]}
             onDelete={handleDelete}
+            onEdit={handleEdit}
           />
         ))}
       </ScrollView>

@@ -1,5 +1,13 @@
-import { useCallback } from "react";
-import { ScrollView, Text, TextInput, View, Pressable } from "react-native";
+import { useCallback, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+  Pressable,
+} from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -13,7 +21,8 @@ import {
   NumericField,
   parseNumericInput,
 } from "@/components/nutrition/numeric-field";
-import type { ProductRow } from "@/types/database";
+import { CategorySelector } from "@/components/nutrition/category-selector";
+import type { ProductCategory, ProductRow } from "@/types/database";
 
 const schema = z.object({
   name: z.string().min(1, "Nom requis"),
@@ -34,6 +43,9 @@ export default function ManualScreen() {
   const router = useRouter();
   const db = useDb();
   const colors = useThemeColors();
+
+  const [submitting, setSubmitting] = useState(false);
+  const [category, setCategory] = useState<ProductCategory>("side");
 
   const {
     control,
@@ -56,28 +68,39 @@ export default function ManualScreen() {
 
   const onSubmit = useCallback(
     async (values: ManualFormValues) => {
-      const productId = ean ?? uuidv4();
-      const product: Omit<ProductRow, "created_at"> = {
-        id: productId,
-        name: values.name,
-        brand: null,
-        image_url: null,
-        source: "manual",
-        calories: values.calories,
-        proteins: values.proteins,
-        carbs: values.carbs,
-        fats: values.fats,
-        fiber: values.fiber ?? null,
-        sugars: values.sugars ?? null,
-        saturated_fat: values.saturated_fat ?? null,
-        salt: values.salt ?? null,
-        last_quantity: 100,
-      };
+      setSubmitting(true);
+      try {
+        const productId = ean ?? uuidv4();
+        const product: Omit<ProductRow, "created_at"> = {
+          id: productId,
+          name: values.name,
+          brand: null,
+          image_url: null,
+          source: "manual",
+          category,
+          calories: values.calories,
+          proteins: values.proteins,
+          carbs: values.carbs,
+          fats: values.fats,
+          fiber: values.fiber ?? null,
+          sugars: values.sugars ?? null,
+          saturated_fat: values.saturated_fat ?? null,
+          salt: values.salt ?? null,
+          last_quantity: 100,
+        };
 
-      await upsertProduct(db, product);
-      router.push(`/add-entry/confirm?productId=${productId}`);
+        await upsertProduct(db, product);
+        router.push(`/add-entry/confirm?productId=${productId}`);
+      } catch {
+        Alert.alert(
+          "Erreur",
+          "Impossible de sauvegarder le produit. Veuillez réessayer.",
+        );
+      } finally {
+        setSubmitting(false);
+      }
     },
-    [db, ean, router],
+    [category, db, ean, router],
   );
 
   return (
@@ -125,6 +148,9 @@ export default function ManualScreen() {
           </Text>
         ) : null}
       </View>
+
+      {/* Category */}
+      <CategorySelector value={category} onChange={setCategory} />
 
       {/* Nutrition header */}
       <Text
@@ -291,16 +317,21 @@ export default function ManualScreen() {
       {/* Submit */}
       <Pressable
         onPress={handleSubmit(onSubmit)}
+        disabled={submitting}
         style={({ pressed }) => ({
           backgroundColor: colors.accent.calories,
           paddingVertical: 14,
           borderRadius: 12,
           borderCurve: "continuous",
           alignItems: "center",
+          flexDirection: "row",
+          justifyContent: "center",
+          gap: 8,
           marginTop: 8,
-          opacity: pressed ? 0.7 : 1,
+          opacity: submitting ? 0.6 : pressed ? 0.7 : 1,
         })}
       >
+        {submitting && <ActivityIndicator size="small" color="#fff" />}
         <Text style={{ color: "#fff", fontSize: 16, fontWeight: "600" }}>
           Valider
         </Text>

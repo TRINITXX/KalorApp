@@ -18,6 +18,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     supportsTablet: true,
     bundleIdentifier: "com.kalorapp.app",
     appleTeamId: process.env.APPLE_TEAM_ID,
+    icon: "./assets/app-icon.icon",
     infoPlist: {
       ITSAppUsesNonExemptEncryption: false,
     },
@@ -26,11 +27,11 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     },
   },
   android: {
+    package: "com.kalorapp.app",
     adaptiveIcon: {
-      backgroundColor: "#E6F4FE",
-      foregroundImage: "./assets/android-icon-foreground.png",
-      backgroundImage: "./assets/android-icon-background.png",
-      monochromeImage: "./assets/android-icon-monochrome.png",
+      foregroundImage: "./assets/android-icon.png",
+      backgroundImage: "./assets/android-icon.png",
+      monochromeImage: "./assets/android-icon.png",
     },
     predictiveBackGestureEnabled: false,
   },
@@ -52,7 +53,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       root: "./src/app",
     },
     eas: {
-      projectId: process.env.EAS_PROJECT_ID ?? "",
+      projectId: "0342d525-6026-4429-bb49-c677043f1f19",
     },
   },
 });

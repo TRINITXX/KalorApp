@@ -40,8 +40,34 @@ export async function addEntry(
     entry.saturated_fat,
     entry.salt,
   );
-  import("@/lib/widget-sync").then((m) => m.syncWidgetData(db)).catch(() => {});
+  import("@/lib/widget-sync")
+    .then((m) => m.syncWidgetData(db))
+    .catch(console.warn);
   return result.lastInsertRowId;
+}
+
+export async function updateEntry(
+  db: SQLiteDatabase,
+  id: number,
+  entry: Omit<AddEntryParams, "product_id" | "product_name" | "date">,
+): Promise<void> {
+  await db.runAsync(
+    `UPDATE entries SET meal = ?, quantity = ?, calories = ?, proteins = ?, carbs = ?, fats = ?, fiber = ?, sugars = ?, saturated_fat = ?, salt = ? WHERE id = ?`,
+    entry.meal,
+    entry.quantity,
+    entry.calories,
+    entry.proteins,
+    entry.carbs,
+    entry.fats,
+    entry.fiber,
+    entry.sugars,
+    entry.saturated_fat,
+    entry.salt,
+    id,
+  );
+  import("@/lib/widget-sync")
+    .then((m) => m.syncWidgetData(db))
+    .catch(console.warn);
 }
 
 export async function deleteEntry(
@@ -49,7 +75,9 @@ export async function deleteEntry(
   id: number,
 ): Promise<void> {
   await db.runAsync("DELETE FROM entries WHERE id = ?", id);
-  import("@/lib/widget-sync").then((m) => m.syncWidgetData(db)).catch(() => {});
+  import("@/lib/widget-sync")
+    .then((m) => m.syncWidgetData(db))
+    .catch(console.warn);
 }
 
 export async function getEntriesByDate(
@@ -57,7 +85,7 @@ export async function getEntriesByDate(
   date: string,
 ): Promise<EntryRow[]> {
   return db.getAllAsync<EntryRow>(
-    "SELECT * FROM entries WHERE date = ? ORDER BY created_at ASC",
+    "SELECT * FROM entries WHERE date = ? ORDER BY product_name ASC",
     date,
   );
 }

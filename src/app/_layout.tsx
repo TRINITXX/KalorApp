@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState } from "react";
-import { ActivityIndicator, View } from "react-native";
+import { ActivityIndicator, AppState, View } from "react-native";
 import { Stack } from "expo-router/stack";
 import type { SQLiteDatabase } from "expo-sqlite";
 
@@ -20,16 +20,33 @@ export default function RootLayout() {
   const [db, setDb] = useState<SQLiteDatabase | null>(null);
 
   useEffect(() => {
-    openSharedDatabase().then((database) => {
+    openSharedDatabase().then(async (database) => {
       setDb(database);
-      syncWidgetData(database).catch(() => {});
+      // Wait for Zustand hydration so goals are loaded from MMKV
+      if (!useSettingsStore.persist.hasHydrated()) {
+        await new Promise<void>((resolve) => {
+          useSettingsStore.persist.onFinishHydration(() => resolve());
+        });
+      }
+      syncWidgetData(database).catch(console.warn);
     });
   }, []);
 
+  // Re-sync widget when app returns to foreground
   useEffect(() => {
     if (!db) return;
-    const unsub = useSettingsStore.subscribe((state) => {
-      syncWidgetData(db).catch(() => {});
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state === "active") {
+        syncWidgetData(db).catch(console.warn);
+      }
+    });
+    return () => sub.remove();
+  }, [db]);
+
+  useEffect(() => {
+    if (!db) return;
+    const unsub = useSettingsStore.subscribe(() => {
+      syncWidgetData(db).catch(console.warn);
     });
     return unsub;
   }, [db]);

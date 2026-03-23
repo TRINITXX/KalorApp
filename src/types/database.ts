@@ -1,5 +1,7 @@
 import type { MealType } from "@/types/nutrition";
 
+export type ProductCategory = "meat" | "side" | "seasoning";
+
 export interface ProductRow {
   id: string;
   name: string;
@@ -14,6 +16,7 @@ export interface ProductRow {
   sugars: number | null;
   saturated_fat: number | null;
   salt: number | null;
+  category: ProductCategory;
   last_quantity: number;
   created_at: string;
 }

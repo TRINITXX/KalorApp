@@ -21,6 +21,7 @@ export default function SearchScreen() {
   const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
+  const [selectingId, setSelectingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (debouncedQuery.length < 2) {
@@ -57,18 +58,58 @@ export default function SearchScreen() {
 
   const handleSelect = useCallback(
     async (result: SearchResult) => {
+      if (selectingId) return;
+      setSelectingId(result.id);
       try {
         const fullProduct = await fetchProduct(result.id);
         if (fullProduct) {
           await upsertProduct(db, flattenProductForDb(fullProduct));
-          router.push(`/add-entry/confirm?productId=${result.id}`);
+        } else {
+          // Product not found on OFF — save basic data from search result
+          await upsertProduct(db, {
+            id: result.id,
+            name: result.name,
+            brand: result.brand,
+            image_url: result.image_url,
+            source: "openfoodfacts",
+            category: "side" as const,
+            calories: result.calories ?? 0,
+            proteins: 0,
+            carbs: 0,
+            fats: 0,
+            fiber: null,
+            sugars: null,
+            saturated_fat: null,
+            salt: null,
+            last_quantity: 100,
+          });
         }
+        router.push(`/add-entry/confirm?productId=${result.id}`);
       } catch {
         // If fetch fails, navigate with basic data
+        await upsertProduct(db, {
+          id: result.id,
+          name: result.name,
+          brand: result.brand,
+          image_url: result.image_url,
+          source: "openfoodfacts",
+          category: "side" as const,
+          calories: result.calories ?? 0,
+          proteins: 0,
+          carbs: 0,
+          fats: 0,
+          fiber: null,
+          sugars: null,
+          saturated_fat: null,
+          salt: null,
+          last_quantity: 100,
+        });
         router.push(`/add-entry/confirm?productId=${result.id}`);
+      } finally {
+        setSelectingId(null);
       }
     },
-    [db, router],
+    [db, router, selectingId],
   );
 
   return (
@@ -123,6 +164,8 @@ export default function SearchScreen() {
             imageUrl={item.image_url}
             calories={item.calories ?? undefined}
             onPress={() => handleSelect(item)}
+            loading={selectingId === item.id}
+            disabled={selectingId !== null}
           />
         )}
         ItemSeparatorComponent={() => (

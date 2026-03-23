@@ -19,6 +19,7 @@ export function flattenProductForDb(
     saturated_fat: product.nutrition_per_100g.saturated_fat,
     salt: product.nutrition_per_100g.salt,
     last_quantity: product.last_quantity,
+    category: product.category ?? "side",
   };
 }
 

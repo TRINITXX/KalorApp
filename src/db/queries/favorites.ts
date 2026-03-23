@@ -28,7 +28,7 @@ export async function getFavorites(
   db: SQLiteDatabase,
 ): Promise<FavoriteWithProduct[]> {
   return db.getAllAsync<FavoriteWithProduct>(
-    `SELECT p.*, f.sort_order, f.quantity AS favorite_quantity FROM favorites f INNER JOIN products p ON p.id = f.product_id ORDER BY f.sort_order ASC`,
+    `SELECT p.*, f.sort_order, f.quantity AS favorite_quantity FROM favorites f INNER JOIN products p ON p.id = f.product_id ORDER BY p.name ASC`,
   );
 }
 

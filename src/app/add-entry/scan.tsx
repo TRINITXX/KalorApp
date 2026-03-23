@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Linking,
   Pressable,
@@ -31,64 +32,64 @@ export default function ScanScreen() {
   const [torch, setTorch] = useState(false);
   const [autoFocus, setAutoFocus] = useState<"on" | "off">("on");
   const [focusing, setFocusing] = useState(false);
+  const [loading, setLoading] = useState(false);
   const cameraRef = useRef<CameraView>(null);
 
   const lookupEan = useCallback(
     async (ean: string) => {
-      const localProduct = await getProduct(db, ean);
-      const hasNutrition =
-        localProduct &&
-        localProduct.source === "openfoodfacts" &&
-        (localProduct.calories > 0 ||
-          localProduct.proteins > 0 ||
-          localProduct.carbs > 0 ||
-          localProduct.fats > 0);
-
-      if (localProduct && hasNutrition) {
-        router.push(`/add-entry/confirm?productId=${ean}`);
-        return;
-      }
-
+      setLoading(true);
       try {
-        const offProduct = await fetchProduct(ean);
-        if (offProduct) {
-          await upsertProduct(db, flattenProductForDb(offProduct));
+        const localProduct = await getProduct(db, ean);
+
+        // Use cached product if already fetched from OpenFoodFacts
+        if (localProduct && localProduct.source === "openfoodfacts") {
           router.push(`/add-entry/confirm?productId=${ean}`);
-        } else if (localProduct) {
-          router.push(`/add-entry/confirm?productId=${ean}`);
-        } else {
-          router.push(`/add-entry/manual?ean=${ean}`);
+          return;
         }
-      } catch {
-        if (localProduct) {
-          router.push(`/add-entry/confirm?productId=${ean}`);
-        } else {
-          Alert.alert(
-            "Erreur réseau",
-            "Impossible de rechercher le produit. Vérifiez votre connexion.",
-            [
-              {
-                text: "Réessayer",
-                onPress: () => {
-                  setScanned(true);
-                  lookupEan(ean);
+
+        try {
+          const offProduct = await fetchProduct(ean);
+          if (offProduct) {
+            await upsertProduct(db, flattenProductForDb(offProduct));
+            router.push(`/add-entry/confirm?productId=${ean}`);
+          } else if (localProduct) {
+            router.push(`/add-entry/confirm?productId=${ean}`);
+          } else {
+            router.push(`/add-entry/manual?ean=${ean}`);
+          }
+        } catch {
+          if (localProduct) {
+            router.push(`/add-entry/confirm?productId=${ean}`);
+          } else {
+            Alert.alert(
+              "Erreur réseau",
+              "Impossible de rechercher le produit. Vérifiez votre connexion.",
+              [
+                {
+                  text: "Réessayer",
+                  onPress: () => {
+                    setScanned(true);
+                    lookupEan(ean);
+                  },
                 },
-              },
-              {
-                text: "Saisie manuelle",
-                onPress: () => router.push(`/add-entry/manual?ean=${ean}`),
-              },
-              {
-                text: "Annuler",
-                onPress: () => {
-                  scanLock.current = false;
-                  setScanned(false);
+                {
+                  text: "Saisie manuelle",
+                  onPress: () => router.push(`/add-entry/manual?ean=${ean}`),
                 },
-                style: "cancel",
-              },
-            ],
-          );
+                {
+                  text: "Annuler",
+                  onPress: () => {
+                    scanLock.current = false;
+                    setScanned(false);
+                  },
+                  style: "cancel",
+                },
+              ],
+            );
+          }
         }
+      } finally {
+        setLoading(false);
       }
     },
     [db, router],
@@ -268,6 +269,14 @@ export default function ScanScreen() {
         </Pressable>
       </View>
 
+      {/* Loading overlay */}
+      {loading && (
+        <View style={styles.loadingOverlay}>
+          <ActivityIndicator size="large" color="#fff" />
+          <Text style={styles.loadingText}>Recherche du produit...</Text>
+        </View>
+      )}
+
       {/* Bottom controls */}
       <View style={styles.bottomBar}>
         {scanned ? (
@@ -361,5 +370,18 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     textAlign: "center",
+  },
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 10,
+  },
+  loadingText: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "600",
+    marginTop: 12,
   },
 });

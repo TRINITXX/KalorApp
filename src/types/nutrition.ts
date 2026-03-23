@@ -1,3 +1,5 @@
+import type { ProductCategory } from "@/types/database";
+
 export interface NutritionValues {
   calories: number;
   proteins: number;
@@ -17,6 +19,7 @@ export interface Product {
   source: "openfoodfacts" | "manual";
   nutrition_per_100g: NutritionValues;
   last_quantity: number;
+  category?: ProductCategory;
   created_at: string;
 }
 

@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS products (
   saturated_fat   REAL,
   salt            REAL,
   last_quantity   REAL DEFAULT 100,
+  category        TEXT NOT NULL DEFAULT 'side',
   created_at      TEXT DEFAULT (datetime('now'))
 );`;
 

@@ -37,6 +37,7 @@ struct DailySummary: Codable {
 
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
+        formatter.calendar = Calendar(identifier: .gregorian)
         let todayString = formatter.string(from: Date())
         return summary.date == todayString ? summary : .empty
     }

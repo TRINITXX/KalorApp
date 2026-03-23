@@ -4,6 +4,7 @@ import {
   Pressable,
   ScrollView,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
@@ -19,9 +20,23 @@ import { updateLastQuantity } from "@/db/queries/products";
 import { calculateForQuantity, getMealForTime } from "@/lib/nutrition-utils";
 import { productRowToNutrition, formatDateISO } from "@/lib/product-utils";
 import { QuantityInput } from "@/components/nutrition/quantity-input";
+import { CATEGORY_LABELS } from "@/constants/categories";
 import type { FavoriteWithProduct } from "@/db/queries/favorites";
+import type { ProductCategory } from "@/types/database";
 
-type Step = "select" | "recap";
+type Step = ProductCategory | "recap";
+
+const STEP_ORDER: Step[] = ["meat", "side", "seasoning", "recap"];
+
+function nextStep(current: Step): Step {
+  const idx = STEP_ORDER.indexOf(current);
+  return STEP_ORDER[Math.min(idx + 1, STEP_ORDER.length - 1)];
+}
+
+function prevStep(current: Step): Step | null {
+  const idx = STEP_ORDER.indexOf(current);
+  return idx <= 0 ? null : STEP_ORDER[idx - 1];
+}
 
 interface ActionButtonProps {
   icon: string;
@@ -70,11 +85,27 @@ export default function AddEntryScreen() {
   const db = useDb();
   const colors = useThemeColors();
 
-  const [step, setStep] = useState<Step>("select");
+  const [step, setStep] = useState<Step>("meat");
   const [favorites, setFavorites] = useState<FavoriteWithProduct[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [quantities, setQuantities] = useState<Record<string, number>>({});
+  const [baseQuantities, setBaseQuantities] = useState<Record<string, number>>(
+    {},
+  );
   const [submitting, setSubmitting] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const isSearchActive = searchQuery.trim().length > 0;
+
+  const searchResults = useMemo(() => {
+    if (!isSearchActive) return [];
+    const q = searchQuery.toLowerCase().trim();
+    return favorites.filter(
+      (f) =>
+        f.name.toLowerCase().includes(q) ||
+        (f.brand && f.brand.toLowerCase().includes(q)),
+    );
+  }, [favorites, searchQuery, isSearchActive]);
 
   const loadFavorites = useCallback(async () => {
     const data = await getFavorites(db);
@@ -83,7 +114,16 @@ export default function AddEntryScreen() {
       const next: Record<string, number> = { ...prev };
       for (const fav of data) {
         if (!(fav.id in next)) {
-          next[fav.id] = (fav.favorite_quantity ?? fav.last_quantity) || 100;
+          next[fav.id] = fav.favorite_quantity || 100;
+        }
+      }
+      return next;
+    });
+    setBaseQuantities((prev) => {
+      const next: Record<string, number> = { ...prev };
+      for (const fav of data) {
+        if (!(fav.id in next)) {
+          next[fav.id] = fav.favorite_quantity || 100;
         }
       }
       return next;
@@ -109,7 +149,8 @@ export default function AddEntryScreen() {
     () =>
       favorites
         .filter((f) => selectedIds.has(f.id))
-        .map((f) => ({ product: f, quantity: quantities[f.id] || 100 })),
+        .map((f) => ({ product: f, quantity: quantities[f.id] || 100 }))
+        .sort((a, b) => a.product.name.localeCompare(b.product.name)),
     [favorites, selectedIds, quantities],
   );
 
@@ -171,7 +212,7 @@ export default function AddEntryScreen() {
       <View style={{ flex: 1, backgroundColor: colors.background }}>
         {/* Back bar */}
         <Pressable
-          onPress={() => setStep("select")}
+          onPress={() => setStep("seasoning")}
           style={{
             flexDirection: "row",
             alignItems: "center",
@@ -270,6 +311,53 @@ export default function AddEntryScreen() {
                 <View
                   style={{
                     flexDirection: "row",
+                    gap: 6,
+                  }}
+                >
+                  {([1, 2, 3, 4] as const).map((m) => {
+                    const base = baseQuantities[item.product.id] || 100;
+                    const active = item.quantity === base * m;
+                    return (
+                      <Pressable
+                        key={m}
+                        onPress={() => {
+                          Haptics.impactAsync(
+                            Haptics.ImpactFeedbackStyle.Light,
+                          );
+                          setQuantities((prev) => ({
+                            ...prev,
+                            [item.product.id]: base * m,
+                          }));
+                        }}
+                        style={({ pressed }) => ({
+                          paddingHorizontal: 12,
+                          paddingVertical: 5,
+                          borderRadius: 8,
+                          borderCurve: "continuous",
+                          backgroundColor: active
+                            ? colors.accent.calories
+                            : colors.card,
+                          borderWidth: active ? 0 : 1,
+                          borderColor: colors.separator,
+                          opacity: pressed ? 0.7 : 1,
+                        })}
+                      >
+                        <Text
+                          style={{
+                            fontSize: 13,
+                            fontWeight: "600",
+                            color: active ? "#fff" : colors.textSecondary,
+                          }}
+                        >
+                          x{m}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+                <View
+                  style={{
+                    flexDirection: "row",
                     alignItems: "center",
                     justifyContent: "space-between",
                   }}
@@ -363,172 +451,363 @@ export default function AddEntryScreen() {
     );
   }
 
-  // ── Select step (default) ──
+  // ── Category step (default) ──
+  const filteredFavorites = favorites.filter((f) => f.category === step);
+  const selectedInStep = filteredFavorites.filter((f) =>
+    selectedIds.has(f.id),
+  ).length;
+
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
+      {/* Title bar with back button */}
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          paddingHorizontal: 12,
+          paddingVertical: 10,
+          gap: 4,
+        }}
+      >
+        {prevStep(step) !== null && (
+          <Pressable onPress={() => setStep(prevStep(step)!)} hitSlop={8}>
+            <SymbolView
+              name="chevron.left"
+              size={18}
+              tintColor={colors.accent.calories}
+            />
+          </Pressable>
+        )}
+        <Text
+          style={{
+            fontSize: 17,
+            fontWeight: "600",
+            color: colors.textPrimary,
+            flex: 1,
+          }}
+        >
+          {CATEGORY_LABELS[step as ProductCategory]}
+        </Text>
+      </View>
+
+      {/* Search bar */}
+      <View style={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 8 }}>
+        <TextInput
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          placeholder="Rechercher un favori..."
+          placeholderTextColor={colors.textMuted}
+          clearButtonMode="while-editing"
+          returnKeyType="search"
+          autoCorrect={false}
+          style={{
+            backgroundColor: colors.card,
+            color: colors.textPrimary,
+            fontSize: 16,
+            paddingHorizontal: 14,
+            paddingVertical: 10,
+            borderRadius: 12,
+            borderCurve: "continuous",
+            borderWidth: 1,
+            borderColor: colors.separator,
+          }}
+        />
+      </View>
+
       <ScrollView
         contentContainerStyle={{ padding: 16, gap: 10, paddingBottom: 100 }}
+        keyboardDismissMode="on-drag"
       >
-        {/* 4x1 action buttons */}
-        <View style={{ flexDirection: "row", gap: 8 }}>
-          <ActionButton
-            icon="barcode.viewfinder"
-            label="Scanner"
-            onPress={() => router.push("/add-entry/scan")}
-            colors={colors}
-          />
-          <ActionButton
-            icon="magnifyingglass"
-            label="Rechercher"
-            onPress={() => router.push("/add-entry/search")}
-            colors={colors}
-          />
-          <ActionButton
-            icon="square.and.pencil"
-            label="Manuel"
-            onPress={() => router.push("/add-entry/manual")}
-            colors={colors}
-          />
-        </View>
-
-        {/* Favorites with checkboxes */}
-        {favorites.length > 0 && (
-          <Text
-            style={{
-              fontSize: 15,
-              fontWeight: "600",
-              color: colors.textSecondary,
-              marginTop: 8,
-              paddingHorizontal: 4,
-            }}
-          >
-            Favoris
-          </Text>
-        )}
-
-        {favorites.map((fav) => {
-          const isSelected = selectedIds.has(fav.id);
-          const qty = quantities[fav.id] || 100;
-          const cal = Math.round((fav.calories * qty) / 100);
-          return (
-            <Pressable
-              key={fav.id}
-              onPress={() => toggleSelection(fav.id)}
-              style={({ pressed }) => ({
-                flexDirection: "row",
-                alignItems: "center",
-                backgroundColor: colors.card,
-                borderRadius: 12,
-                borderCurve: "continuous",
-                padding: 12,
-                gap: 12,
-                borderWidth: isSelected ? 1.5 : 0,
-                borderColor: isSelected
-                  ? colors.accent.calories
-                  : "transparent",
-                opacity: pressed ? 0.7 : 1,
-              })}
-            >
-              {/* Checkbox */}
-              <View
+        {isSearchActive ? (
+          <>
+            {searchResults.length === 0 ? (
+              <Text
                 style={{
-                  width: 24,
-                  height: 24,
-                  borderRadius: 6,
-                  borderWidth: 2,
-                  borderColor: isSelected
-                    ? colors.accent.calories
-                    : colors.separator,
-                  backgroundColor: isSelected
-                    ? colors.accent.calories
-                    : "transparent",
-                  alignItems: "center",
-                  justifyContent: "center",
+                  textAlign: "center",
+                  color: colors.textMuted,
+                  fontSize: 15,
+                  marginTop: 32,
                 }}
               >
-                {isSelected && (
-                  <SymbolView name="checkmark" size={14} tintColor="#fff" />
-                )}
-              </View>
-
-              {/* Image */}
-              {fav.image_url ? (
-                <Image
-                  source={{ uri: fav.image_url }}
-                  style={
-                    {
-                      width: 40,
-                      height: 40,
-                      borderRadius: 8,
+                Aucun résultat
+              </Text>
+            ) : (
+              searchResults.map((fav) => {
+                const cal = Math.round(fav.calories);
+                return (
+                  <Pressable
+                    key={fav.id}
+                    onPress={() =>
+                      router.push(`/add-entry/confirm?productId=${fav.id}`)
+                    }
+                    style={({ pressed }) => ({
+                      flexDirection: "row",
+                      alignItems: "center",
+                      backgroundColor: colors.card,
+                      borderRadius: 12,
                       borderCurve: "continuous",
-                    } as unknown as ImageStyle
-                  }
-                  contentFit="cover"
-                  transition={200}
+                      padding: 12,
+                      gap: 12,
+                      opacity: pressed ? 0.7 : 1,
+                    })}
+                  >
+                    {/* Image */}
+                    {fav.image_url ? (
+                      <Image
+                        source={{ uri: fav.image_url }}
+                        style={
+                          {
+                            width: 40,
+                            height: 40,
+                            borderRadius: 8,
+                            borderCurve: "continuous",
+                          } as unknown as ImageStyle
+                        }
+                        contentFit="cover"
+                        transition={200}
+                      />
+                    ) : (
+                      <View
+                        style={{
+                          width: 40,
+                          height: 40,
+                          borderRadius: 8,
+                          borderCurve: "continuous",
+                          backgroundColor: colors.isDark
+                            ? "rgba(255,255,255,0.08)"
+                            : "rgba(0,0,0,0.05)",
+                          alignItems: "center",
+                          justifyContent: "center",
+                        }}
+                      >
+                        <Text style={{ fontSize: 18, color: colors.textMuted }}>
+                          ?
+                        </Text>
+                      </View>
+                    )}
+
+                    {/* Info */}
+                    <View style={{ flex: 1 }}>
+                      <Text
+                        style={{
+                          fontSize: 15,
+                          fontWeight: "500",
+                          color: colors.textPrimary,
+                        }}
+                        numberOfLines={1}
+                      >
+                        {fav.name}
+                      </Text>
+                      <View
+                        style={{
+                          flexDirection: "row",
+                          alignItems: "center",
+                          gap: 6,
+                          marginTop: 2,
+                        }}
+                      >
+                        <View
+                          style={{
+                            paddingHorizontal: 6,
+                            paddingVertical: 1,
+                            borderRadius: 4,
+                            backgroundColor: colors.isDark
+                              ? "rgba(255,255,255,0.08)"
+                              : "rgba(0,0,0,0.05)",
+                          }}
+                        >
+                          <Text
+                            style={{
+                              fontSize: 10,
+                              color: colors.textMuted,
+                              fontWeight: "500",
+                            }}
+                          >
+                            {CATEGORY_LABELS[fav.category]}
+                          </Text>
+                        </View>
+                        <Text
+                          style={{
+                            fontSize: 12,
+                            color: colors.textMuted,
+                            fontVariant: ["tabular-nums"],
+                          }}
+                        >
+                          {cal} kcal/100g
+                        </Text>
+                      </View>
+                    </View>
+                  </Pressable>
+                );
+              })
+            )}
+          </>
+        ) : (
+          <>
+            {/* Action buttons — only on first step */}
+            {step === "meat" && (
+              <View style={{ flexDirection: "row", gap: 8 }}>
+                <ActionButton
+                  icon="barcode.viewfinder"
+                  label="Scanner"
+                  onPress={() => router.push("/add-entry/scan")}
+                  colors={colors}
                 />
-              ) : (
-                <View
-                  style={{
-                    width: 40,
-                    height: 40,
-                    borderRadius: 8,
-                    borderCurve: "continuous",
-                    backgroundColor: colors.isDark
-                      ? "rgba(255,255,255,0.08)"
-                      : "rgba(0,0,0,0.05)",
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
-                >
-                  <Text style={{ fontSize: 18, color: colors.textMuted }}>
-                    ?
-                  </Text>
-                </View>
-              )}
-
-              {/* Info */}
-              <View style={{ flex: 1 }}>
-                <Text
-                  style={{
-                    fontSize: 15,
-                    fontWeight: "500",
-                    color: colors.textPrimary,
-                  }}
-                  numberOfLines={1}
-                >
-                  {fav.name}
-                </Text>
-                <Text
-                  style={{
-                    fontSize: 12,
-                    color: colors.textMuted,
-                    marginTop: 2,
-                    fontVariant: ["tabular-nums"],
-                  }}
-                >
-                  {cal} kcal · {qty}g
-                </Text>
+                <ActionButton
+                  icon="magnifyingglass"
+                  label="Rechercher"
+                  onPress={() => router.push("/add-entry/search")}
+                  colors={colors}
+                />
+                <ActionButton
+                  icon="square.and.pencil"
+                  label="Manuel"
+                  onPress={() => router.push("/add-entry/manual")}
+                  colors={colors}
+                />
               </View>
-            </Pressable>
-          );
-        })}
+            )}
 
-        {favorites.length === 0 && (
-          <Text
-            style={{
-              textAlign: "center",
-              color: colors.textMuted,
-              fontSize: 15,
-              marginTop: 32,
-            }}
-          >
-            Aucun favori. Ajoutez des produits en favoris pour les voir ici.
-          </Text>
+            {/* Favorites with checkboxes */}
+            {filteredFavorites.length > 0 && (
+              <Text
+                style={{
+                  fontSize: 15,
+                  fontWeight: "600",
+                  color: colors.textSecondary,
+                  marginTop: 8,
+                  paddingHorizontal: 4,
+                }}
+              >
+                Favoris
+              </Text>
+            )}
+
+            {filteredFavorites.map((fav) => {
+              const isSelected = selectedIds.has(fav.id);
+              const qty = quantities[fav.id] || 100;
+              const cal = Math.round((fav.calories * qty) / 100);
+              return (
+                <Pressable
+                  key={fav.id}
+                  onPress={() => toggleSelection(fav.id)}
+                  style={({ pressed }) => ({
+                    flexDirection: "row",
+                    alignItems: "center",
+                    backgroundColor: colors.card,
+                    borderRadius: 12,
+                    borderCurve: "continuous",
+                    padding: 12,
+                    gap: 12,
+                    borderWidth: isSelected ? 1.5 : 0,
+                    borderColor: isSelected
+                      ? colors.accent.calories
+                      : "transparent",
+                    opacity: pressed ? 0.7 : 1,
+                  })}
+                >
+                  {/* Checkbox */}
+                  <View
+                    style={{
+                      width: 24,
+                      height: 24,
+                      borderRadius: 6,
+                      borderWidth: 2,
+                      borderColor: isSelected
+                        ? colors.accent.calories
+                        : colors.separator,
+                      backgroundColor: isSelected
+                        ? colors.accent.calories
+                        : "transparent",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    {isSelected && (
+                      <SymbolView name="checkmark" size={14} tintColor="#fff" />
+                    )}
+                  </View>
+
+                  {/* Image */}
+                  {fav.image_url ? (
+                    <Image
+                      source={{ uri: fav.image_url }}
+                      style={
+                        {
+                          width: 40,
+                          height: 40,
+                          borderRadius: 8,
+                          borderCurve: "continuous",
+                        } as unknown as ImageStyle
+                      }
+                      contentFit="cover"
+                      transition={200}
+                    />
+                  ) : (
+                    <View
+                      style={{
+                        width: 40,
+                        height: 40,
+                        borderRadius: 8,
+                        borderCurve: "continuous",
+                        backgroundColor: colors.isDark
+                          ? "rgba(255,255,255,0.08)"
+                          : "rgba(0,0,0,0.05)",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <Text style={{ fontSize: 18, color: colors.textMuted }}>
+                        ?
+                      </Text>
+                    </View>
+                  )}
+
+                  {/* Info */}
+                  <View style={{ flex: 1 }}>
+                    <Text
+                      style={{
+                        fontSize: 15,
+                        fontWeight: "500",
+                        color: colors.textPrimary,
+                      }}
+                      numberOfLines={1}
+                    >
+                      {fav.name}
+                    </Text>
+                    <Text
+                      style={{
+                        fontSize: 12,
+                        color: colors.textMuted,
+                        marginTop: 2,
+                        fontVariant: ["tabular-nums"],
+                      }}
+                    >
+                      {cal} kcal · {qty}g
+                    </Text>
+                  </View>
+                </Pressable>
+              );
+            })}
+
+            {filteredFavorites.length === 0 && (
+              <Text
+                style={{
+                  textAlign: "center",
+                  color: colors.textMuted,
+                  fontSize: 15,
+                  marginTop: 32,
+                }}
+              >
+                Aucun favori dans cette catégorie
+              </Text>
+            )}
+          </>
         )}
       </ScrollView>
 
-      {/* Bottom button */}
-      {selectedIds.size > 0 && (
+      {/* Bottom button — only when not searching */}
+      {!isSearchActive && (
         <View
           style={{
             position: "absolute",
@@ -541,7 +820,7 @@ export default function AddEntryScreen() {
           }}
         >
           <Pressable
-            onPress={() => setStep("recap")}
+            onPress={() => setStep(nextStep(step))}
             style={({ pressed }) => ({
               backgroundColor: colors.accent.calories,
               borderRadius: 12,
@@ -552,7 +831,7 @@ export default function AddEntryScreen() {
             })}
           >
             <Text style={{ fontSize: 16, fontWeight: "700", color: "#fff" }}>
-              Suivant ({selectedIds.size})
+              Suivant{selectedInStep > 0 ? ` (${selectedInStep})` : ""}
             </Text>
           </Pressable>
         </View>

@@ -7,13 +7,14 @@ export async function upsertProduct(
   product: Omit<ProductRow, "created_at">,
 ): Promise<void> {
   await db.runAsync(
-    `INSERT INTO products (id, name, brand, image_url, source, calories, proteins, carbs, fats, fiber, sugars, saturated_fat, salt, last_quantity)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO products (id, name, brand, image_url, source, calories, proteins, carbs, fats, fiber, sugars, saturated_fat, salt, last_quantity, category)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        name = excluded.name, brand = excluded.brand, image_url = excluded.image_url,
        calories = excluded.calories, proteins = excluded.proteins, carbs = excluded.carbs,
        fats = excluded.fats, fiber = excluded.fiber, sugars = excluded.sugars,
-       saturated_fat = excluded.saturated_fat, salt = excluded.salt, last_quantity = excluded.last_quantity`,
+       saturated_fat = excluded.saturated_fat, salt = excluded.salt, last_quantity = excluded.last_quantity,
+       category = excluded.category`,
     product.id,
     product.name,
     product.brand,
@@ -28,6 +29,7 @@ export async function upsertProduct(
     product.saturated_fat,
     product.salt,
     product.last_quantity,
+    product.category,
   );
 }
 

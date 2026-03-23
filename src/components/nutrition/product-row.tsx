@@ -1,5 +1,5 @@
 import { Image, type ImageStyle } from "expo-image";
-import { Pressable, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, Text, View } from "react-native";
 
 import { useThemeColors } from "@/hooks/use-theme-colors";
 
@@ -9,6 +9,8 @@ interface ProductRowProps {
   imageUrl?: string | null;
   calories?: number;
   onPress: () => void;
+  loading?: boolean;
+  disabled?: boolean;
 }
 
 export function ProductRow({
@@ -17,19 +19,22 @@ export function ProductRow({
   imageUrl,
   calories,
   onPress,
+  loading,
+  disabled,
 }: ProductRowProps) {
   const colors = useThemeColors();
 
   return (
     <Pressable
       onPress={onPress}
+      disabled={disabled}
       style={({ pressed }) => ({
         flexDirection: "row",
         alignItems: "center",
         minHeight: 44,
         paddingVertical: 10,
         paddingHorizontal: 16,
-        opacity: pressed ? 0.7 : 1,
+        opacity: pressed ? 0.7 : disabled && !loading ? 0.4 : 1,
       })}
     >
       {/* Thumbnail */}
@@ -98,8 +103,14 @@ export function ProductRow({
         ) : null}
       </View>
 
-      {/* Calories per 100g */}
-      {calories !== undefined ? (
+      {/* Loading or Calories per 100g */}
+      {loading ? (
+        <ActivityIndicator
+          size="small"
+          color={colors.textMuted}
+          style={{ marginLeft: 8 }}
+        />
+      ) : calories !== undefined ? (
         <Text
           selectable
           style={{

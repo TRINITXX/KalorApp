@@ -28,7 +28,8 @@ import {
 } from "@/db/queries/favorites";
 import { NumericField, parseNumericInput } from "@/components/nutrition/numeric-field";
 import { QuantityInput } from "@/components/nutrition/quantity-input";
-import type { ProductRow } from "@/types/database";
+import { CategorySelector } from "@/components/nutrition/category-selector";
+import type { ProductCategory, ProductRow } from "@/types/database";
 
 // ─── Edit form schema ────────────────────────────────────────────────────────
 
@@ -182,6 +183,17 @@ export default function ProductDetailScreen() {
     }
   }, [db, favorite, product]);
 
+  const handleCategoryChange = useCallback(
+    async (cat: ProductCategory) => {
+      if (!product) return;
+      const updated = { ...product, category: cat };
+      const { created_at: _ca, ...rest } = updated;
+      await upsertProduct(db, rest);
+      setProduct(updated);
+    },
+    [db, product],
+  );
+
   const onSave = useCallback(
     async (values: EditFormValues) => {
       if (!product) return;
@@ -193,6 +205,7 @@ export default function ProductDetailScreen() {
           brand: values.brand?.trim() || null,
           image_url: product.image_url,
           source: product.source,
+          category: product.category,
           calories: values.calories,
           proteins: values.proteins,
           carbs: values.carbs,
@@ -325,7 +338,7 @@ export default function ProductDetailScreen() {
             Valeurs nutritionnelles (pour 100g)
           </Text>
 
-          {/* Required nutrients */}
+          {/* Nutrients — ordered: cal, fats, sat_fat, carbs, sugars, fiber, proteins, salt */}
           <Controller
             control={control}
             name="calories"
@@ -346,10 +359,10 @@ export default function ProductDetailScreen() {
 
           <Controller
             control={control}
-            name="proteins"
+            name="fats"
             render={({ field: { onChange, onBlur, value } }) => (
               <NumericField
-                label="Proteines (g)"
+                label="Lipides (g)"
                 value={value === 0 ? "" : String(value)}
                 onChangeText={(text) => {
                   const num = parseNumericInput(text);
@@ -357,7 +370,25 @@ export default function ProductDetailScreen() {
                 }}
                 onBlur={onBlur}
                 colors={colors}
-                error={errors.proteins?.message}
+                error={errors.fats?.message}
+              />
+            )}
+          />
+
+          <Controller
+            control={control}
+            name="saturated_fat"
+            render={({ field: { onChange, onBlur, value } }) => (
+              <NumericField
+                label="Graisses saturées (g)"
+                value={value == null ? "" : String(value)}
+                onChangeText={(text) => {
+                  onChange(parseNumericInput(text));
+                }}
+                onBlur={onBlur}
+                colors={colors}
+                optional
+                error={errors.saturated_fat?.message}
               />
             )}
           />
@@ -382,23 +413,22 @@ export default function ProductDetailScreen() {
 
           <Controller
             control={control}
-            name="fats"
+            name="sugars"
             render={({ field: { onChange, onBlur, value } }) => (
               <NumericField
-                label="Lipides (g)"
-                value={value === 0 ? "" : String(value)}
+                label="Sucres (g)"
+                value={value == null ? "" : String(value)}
                 onChangeText={(text) => {
-                  const num = parseNumericInput(text);
-                  onChange(num ?? 0);
+                  onChange(parseNumericInput(text));
                 }}
                 onBlur={onBlur}
                 colors={colors}
-                error={errors.fats?.message}
+                optional
+                error={errors.sugars?.message}
               />
             )}
           />
 
-          {/* Optional nutrients */}
           <Controller
             control={control}
             name="fiber"
@@ -419,36 +449,18 @@ export default function ProductDetailScreen() {
 
           <Controller
             control={control}
-            name="sugars"
+            name="proteins"
             render={({ field: { onChange, onBlur, value } }) => (
               <NumericField
-                label="Sucres (g)"
-                value={value == null ? "" : String(value)}
+                label="Proteines (g)"
+                value={value === 0 ? "" : String(value)}
                 onChangeText={(text) => {
-                  onChange(parseNumericInput(text));
+                  const num = parseNumericInput(text);
+                  onChange(num ?? 0);
                 }}
                 onBlur={onBlur}
                 colors={colors}
-                optional
-                error={errors.sugars?.message}
-              />
-            )}
-          />
-
-          <Controller
-            control={control}
-            name="saturated_fat"
-            render={({ field: { onChange, onBlur, value } }) => (
-              <NumericField
-                label="Graisses saturées (g)"
-                value={value == null ? "" : String(value)}
-                onChangeText={(text) => {
-                  onChange(parseNumericInput(text));
-                }}
-                onBlur={onBlur}
-                colors={colors}
-                optional
-                error={errors.saturated_fat?.message}
+                error={errors.proteins?.message}
               />
             )}
           />
@@ -622,6 +634,14 @@ export default function ProductDetailScreen() {
         </Pressable>
       </View>
 
+      {/* Category */}
+      <View style={{ alignItems: "center" }}>
+        <CategorySelector
+          value={product.category}
+          onChange={handleCategoryChange}
+        />
+      </View>
+
       {/* Quantity + nutritional table */}
       {favorite && (
         <View
@@ -723,8 +743,13 @@ export default function ProductDetailScreen() {
           colors={colors}
         />
         <NutrientRow
-          label="Protéines"
-          value={`${formatNutrient(product.proteins, showPer100g, favQuantity)} g`}
+          label="Lipides"
+          value={`${formatNutrient(product.fats, showPer100g, favQuantity)} g`}
+          colors={colors}
+        />
+        <NutrientRow
+          label="Graisses saturées"
+          value={formatNutrientValue(product.saturated_fat != null ? (showPer100g ? product.saturated_fat : product.saturated_fat * favQuantity / 100) : null, "g")}
           colors={colors}
         />
         <NutrientRow
@@ -733,8 +758,8 @@ export default function ProductDetailScreen() {
           colors={colors}
         />
         <NutrientRow
-          label="Lipides"
-          value={`${formatNutrient(product.fats, showPer100g, favQuantity)} g`}
+          label="Sucres"
+          value={formatNutrientValue(product.sugars != null ? (showPer100g ? product.sugars : product.sugars * favQuantity / 100) : null, "g")}
           colors={colors}
         />
         <NutrientRow
@@ -743,13 +768,8 @@ export default function ProductDetailScreen() {
           colors={colors}
         />
         <NutrientRow
-          label="Sucres"
-          value={formatNutrientValue(product.sugars != null ? (showPer100g ? product.sugars : product.sugars * favQuantity / 100) : null, "g")}
-          colors={colors}
-        />
-        <NutrientRow
-          label="Graisses saturées"
-          value={formatNutrientValue(product.saturated_fat != null ? (showPer100g ? product.saturated_fat : product.saturated_fat * favQuantity / 100) : null, "g")}
+          label="Protéines"
+          value={`${formatNutrient(product.proteins, showPer100g, favQuantity)} g`}
           colors={colors}
         />
         <NutrientRow
