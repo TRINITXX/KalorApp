@@ -26,7 +26,7 @@ import type { ProductCategory } from "@/types/database";
 
 type Step = ProductCategory | "recap";
 
-const STEP_ORDER: Step[] = ["meat", "side", "seasoning", "recap"];
+const STEP_ORDER: Step[] = ["meat", "side", "seasoning", "dessert", "recap"];
 
 function nextStep(current: Step): Step {
   const idx = STEP_ORDER.indexOf(current);
@@ -212,7 +212,7 @@ export default function AddEntryScreen() {
       <View style={{ flex: 1, backgroundColor: colors.background }}>
         {/* Back bar */}
         <Pressable
-          onPress={() => setStep("seasoning")}
+          onPress={() => setStep("dessert")}
           style={{
             flexDirection: "row",
             alignItems: "center",
@@ -459,36 +459,31 @@ export default function AddEntryScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
-      {/* Title bar with back button */}
-      <View
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          paddingHorizontal: 12,
-          paddingVertical: 10,
-          gap: 4,
-        }}
-      >
-        {prevStep(step) !== null && (
-          <Pressable onPress={() => setStep(prevStep(step)!)} hitSlop={8}>
+      {/* Back button */}
+      {prevStep(step) !== null && (
+        <View style={{ paddingHorizontal: 12, paddingTop: 10 }}>
+          <Pressable
+            onPress={() => setStep(prevStep(step)!)}
+            hitSlop={8}
+            style={{ flexDirection: "row", alignItems: "center", gap: 4 }}
+          >
             <SymbolView
               name="chevron.left"
               size={18}
               tintColor={colors.accent.calories}
             />
+            <Text
+              style={{
+                fontSize: 16,
+                color: colors.accent.calories,
+                fontWeight: "500",
+              }}
+            >
+              Retour
+            </Text>
           </Pressable>
-        )}
-        <Text
-          style={{
-            fontSize: 17,
-            fontWeight: "600",
-            color: colors.textPrimary,
-            flex: 1,
-          }}
-        >
-          {CATEGORY_LABELS[step as ProductCategory]}
-        </Text>
-      </View>
+        </View>
+      )}
 
       {/* Search bar */}
       <View style={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 8 }}>
@@ -668,20 +663,19 @@ export default function AddEntryScreen() {
               </View>
             )}
 
-            {/* Favorites with checkboxes */}
-            {filteredFavorites.length > 0 && (
-              <Text
-                style={{
-                  fontSize: 15,
-                  fontWeight: "600",
-                  color: colors.textSecondary,
-                  marginTop: 8,
-                  paddingHorizontal: 4,
-                }}
-              >
-                Favoris
-              </Text>
-            )}
+            {/* Category label */}
+            <Text
+              style={{
+                fontSize: 17,
+                fontWeight: "600",
+                color: colors.textPrimary,
+                textAlign: "center",
+                marginTop: 8,
+                marginBottom: 4,
+              }}
+            >
+              {CATEGORY_LABELS[step as ProductCategory]}
+            </Text>
 
             {filteredFavorites.map((fav) => {
               const isSelected = selectedIds.has(fav.id);

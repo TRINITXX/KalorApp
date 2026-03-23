@@ -6,6 +6,9 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   slug: "KalorApp",
   scheme: "kalorapp",
   version: "1.0.0",
+  updates: {
+    url: "https://u.expo.dev/0342d525-6026-4429-bb49-c677043f1f19",
+  },
   orientation: "portrait",
   icon: "./assets/icon.png",
   userInterfaceStyle: "light",
@@ -18,6 +21,9 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     supportsTablet: true,
     bundleIdentifier: "com.kalorapp.app",
     appleTeamId: process.env.APPLE_TEAM_ID,
+    runtimeVersion: {
+      policy: "appVersion",
+    },
     icon: "./assets/app-icon.icon",
     infoPlist: {
       ITSAppUsesNonExemptEncryption: false,

@@ -1,6 +1,6 @@
 import type { MealType } from "@/types/nutrition";
 
-export type ProductCategory = "meat" | "side" | "seasoning";
+export type ProductCategory = "meat" | "side" | "seasoning" | "dessert";
 
 export interface ProductRow {
   id: string;
