@@ -50,7 +50,7 @@ export default function QuickAddScreen() {
       for (const fav of favs) {
         initial[fav.id] = {
           selected: false,
-          quantity: fav.last_quantity > 0 ? fav.last_quantity : 100,
+          quantity: (fav.favorite_quantity ?? fav.last_quantity) || 100,
         };
       }
       setSelections(initial);

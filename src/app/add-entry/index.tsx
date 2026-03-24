@@ -21,6 +21,7 @@ import { calculateForQuantity, getMealForTime } from "@/lib/nutrition-utils";
 import { productRowToNutrition, formatDateISO } from "@/lib/product-utils";
 import { QuantityInput } from "@/components/nutrition/quantity-input";
 import { CATEGORY_LABELS } from "@/constants/categories";
+import { useCheckedProductsStore } from "@/stores/checked-products-store";
 import type { FavoriteWithProduct } from "@/db/queries/favorites";
 import type { ProductCategory } from "@/types/database";
 
@@ -114,7 +115,7 @@ export default function AddEntryScreen() {
       const next: Record<string, number> = { ...prev };
       for (const fav of data) {
         if (!(fav.id in next)) {
-          next[fav.id] = fav.favorite_quantity || 100;
+          next[fav.id] = (fav.favorite_quantity ?? fav.last_quantity) || 100;
         }
       }
       return next;
@@ -123,7 +124,7 @@ export default function AddEntryScreen() {
       const next: Record<string, number> = { ...prev };
       for (const fav of data) {
         if (!(fav.id in next)) {
-          next[fav.id] = fav.favorite_quantity || 100;
+          next[fav.id] = (fav.favorite_quantity ?? fav.last_quantity) || 100;
         }
       }
       return next;
@@ -132,7 +133,17 @@ export default function AddEntryScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      loadFavorites();
+      loadFavorites().then(() => {
+        const checkedIds = useCheckedProductsStore.getState().ids;
+        if (checkedIds.length > 0) {
+          setSelectedIds((prev) => {
+            const next = new Set(prev);
+            for (const id of checkedIds) next.add(id);
+            return next;
+          });
+          useCheckedProductsStore.getState().clear();
+        }
+      });
     }, [loadFavorites]),
   );
 
@@ -485,8 +496,36 @@ export default function AddEntryScreen() {
         </View>
       )}
 
-      {/* Search bar */}
-      <View style={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 8 }}>
+      <ScrollView
+        contentContainerStyle={{ padding: 16, gap: 10, paddingBottom: 100 }}
+        keyboardDismissMode="on-drag"
+        keyboardShouldPersistTaps="handled"
+      >
+        {/* Action buttons — only on first step, before search */}
+        {!isSearchActive && step === "meat" && (
+          <View style={{ flexDirection: "row", gap: 8 }}>
+            <ActionButton
+              icon="barcode.viewfinder"
+              label="Scanner"
+              onPress={() => router.push("/add-entry/scan")}
+              colors={colors}
+            />
+            <ActionButton
+              icon="magnifyingglass"
+              label="Rechercher"
+              onPress={() => router.push("/add-entry/search")}
+              colors={colors}
+            />
+            <ActionButton
+              icon="square.and.pencil"
+              label="Manuel"
+              onPress={() => router.push("/add-entry/manual")}
+              colors={colors}
+            />
+          </View>
+        )}
+
+        {/* Search bar — after action buttons */}
         <TextInput
           value={searchQuery}
           onChangeText={setSearchQuery}
@@ -507,12 +546,7 @@ export default function AddEntryScreen() {
             borderColor: colors.separator,
           }}
         />
-      </View>
 
-      <ScrollView
-        contentContainerStyle={{ padding: 16, gap: 10, paddingBottom: 100 }}
-        keyboardDismissMode="on-drag"
-      >
         {isSearchActive ? (
           <>
             {searchResults.length === 0 ? (
@@ -528,13 +562,13 @@ export default function AddEntryScreen() {
               </Text>
             ) : (
               searchResults.map((fav) => {
-                const cal = Math.round(fav.calories);
+                const isSelected = selectedIds.has(fav.id);
+                const qty = quantities[fav.id] || 100;
+                const cal = Math.round((fav.calories * qty) / 100);
                 return (
                   <Pressable
                     key={fav.id}
-                    onPress={() =>
-                      router.push(`/add-entry/confirm?productId=${fav.id}`)
-                    }
+                    onPress={() => toggleSelection(fav.id)}
                     style={({ pressed }) => ({
                       flexDirection: "row",
                       alignItems: "center",
@@ -543,9 +577,38 @@ export default function AddEntryScreen() {
                       borderCurve: "continuous",
                       padding: 12,
                       gap: 12,
+                      borderWidth: isSelected ? 1.5 : 0,
+                      borderColor: isSelected
+                        ? colors.accent.calories
+                        : "transparent",
                       opacity: pressed ? 0.7 : 1,
                     })}
                   >
+                    {/* Checkbox */}
+                    <View
+                      style={{
+                        width: 24,
+                        height: 24,
+                        borderRadius: 6,
+                        borderWidth: 2,
+                        borderColor: isSelected
+                          ? colors.accent.calories
+                          : colors.separator,
+                        backgroundColor: isSelected
+                          ? colors.accent.calories
+                          : "transparent",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      {isSelected && (
+                        <SymbolView
+                          name="checkmark"
+                          size={14}
+                          tintColor="#fff"
+                        />
+                      )}
+                    </View>
                     {/* Image */}
                     {fav.image_url ? (
                       <Image
@@ -593,44 +656,16 @@ export default function AddEntryScreen() {
                       >
                         {fav.name}
                       </Text>
-                      <View
+                      <Text
                         style={{
-                          flexDirection: "row",
-                          alignItems: "center",
-                          gap: 6,
+                          fontSize: 12,
+                          color: colors.textMuted,
                           marginTop: 2,
+                          fontVariant: ["tabular-nums"],
                         }}
                       >
-                        <View
-                          style={{
-                            paddingHorizontal: 6,
-                            paddingVertical: 1,
-                            borderRadius: 4,
-                            backgroundColor: colors.isDark
-                              ? "rgba(255,255,255,0.08)"
-                              : "rgba(0,0,0,0.05)",
-                          }}
-                        >
-                          <Text
-                            style={{
-                              fontSize: 10,
-                              color: colors.textMuted,
-                              fontWeight: "500",
-                            }}
-                          >
-                            {CATEGORY_LABELS[fav.category]}
-                          </Text>
-                        </View>
-                        <Text
-                          style={{
-                            fontSize: 12,
-                            color: colors.textMuted,
-                            fontVariant: ["tabular-nums"],
-                          }}
-                        >
-                          {cal} kcal/100g
-                        </Text>
-                      </View>
+                        {cal} kcal · {qty}g
+                      </Text>
                     </View>
                   </Pressable>
                 );
@@ -639,30 +674,6 @@ export default function AddEntryScreen() {
           </>
         ) : (
           <>
-            {/* Action buttons — only on first step */}
-            {step === "meat" && (
-              <View style={{ flexDirection: "row", gap: 8 }}>
-                <ActionButton
-                  icon="barcode.viewfinder"
-                  label="Scanner"
-                  onPress={() => router.push("/add-entry/scan")}
-                  colors={colors}
-                />
-                <ActionButton
-                  icon="magnifyingglass"
-                  label="Rechercher"
-                  onPress={() => router.push("/add-entry/search")}
-                  colors={colors}
-                />
-                <ActionButton
-                  icon="square.and.pencil"
-                  label="Manuel"
-                  onPress={() => router.push("/add-entry/manual")}
-                  colors={colors}
-                />
-              </View>
-            )}
-
             {/* Category label */}
             <Text
               style={{
