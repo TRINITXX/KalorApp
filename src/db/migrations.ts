@@ -13,6 +13,8 @@ export async function migrateDbIfNeeded(
   db: Pick<SQLiteDatabase, "execAsync" | "getFirstAsync">,
 ): Promise<void> {
   await db.execAsync("PRAGMA foreign_keys = ON;");
+  // Siri's extension writes to the same file: wait for its lock, as it waits for ours.
+  await db.execAsync("PRAGMA busy_timeout = 3000;");
   await db.execAsync("PRAGMA journal_mode = 'wal';");
 
   const result = await db.getFirstAsync<{ user_version: number }>(

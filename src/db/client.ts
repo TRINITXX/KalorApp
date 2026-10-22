@@ -12,14 +12,17 @@ const MOVED_KEY = "db_moved_to_shared_container";
 
 const fileUri = (path: string) => `file://${encodeURI(path)}`;
 
+// Where openDatabaseAsync(DATABASE_NAME) puts the journal without a directory.
+const legacyPath = () => `${defaultDatabaseDirectory}/${DATABASE_NAME}`;
+
 /**
  * Opens the journal in the App Group container: the file the widget and Siri
  * (targets/widget/SQLiteHelper.swift) read and write.
  *
- * Up to build 1.1.0 the app passed the container path as the database *name*.
- * expo-sqlite put it under its own folder, so the app kept a private journal
- * at <Documents>/SQLite/<container path>/kalor.db that Siri never saw. That
- * journal holds the user's data: it is moved once into the container.
+ * Up to build 1.1.0 the native bridge was left out of the app (no podspec), so
+ * the app kept its journal in expo-sqlite's default folder, where Siri never
+ * saw it. That journal holds the user's data: it is moved once into the
+ * container.
  */
 export async function openSharedDatabase(): Promise<SQLiteDatabase> {
   const sharedPath = Platform.OS === "ios" ? getSharedContainerPath() : null;
@@ -31,19 +34,28 @@ export async function openSharedDatabase(): Promise<SQLiteDatabase> {
   }
 
   const containerDir = sharedPath.slice(0, sharedPath.lastIndexOf("/"));
-  // The name the old code ended up using, relative to the default folder.
-  const legacyName = sharedPath.replace(/^\/+/, "");
 
   if (!mmkv.getBoolean(MOVED_KEY)) {
     try {
-      await moveLegacyJournal(legacyName, sharedPath, containerDir);
+      await moveLegacyJournal(sharedPath, containerDir);
       mmkv.set(MOVED_KEY, true);
     } catch (error) {
-      // Better the old journal than an empty one: the move is retried next launch.
       console.warn("Journal move to the App Group failed", error);
-      const legacy = await openDatabaseAsync(legacyName);
-      await migrateDbIfNeeded(legacy);
-      return legacy;
+      // Once the old file is renamed the move went through: only the flag
+      // failed, and opening the old name would create an empty journal.
+      if (new File(fileUri(legacyPath())).exists) {
+        // Better the old journal than an empty one: the move is retried next
+        // launch. A half-done copy goes too, or Siri would write where the app
+        // does not read for the whole session.
+        try {
+          setAside(sharedPath, `kalor-failed-move-${Date.now()}.db`);
+        } catch (setAsideError) {
+          console.warn("Failed copy left in the App Group", setAsideError);
+        }
+        const legacy = await openDatabaseAsync(DATABASE_NAME);
+        await migrateDbIfNeeded(legacy);
+        return legacy;
+      }
     }
   }
 
@@ -52,11 +64,11 @@ export async function openSharedDatabase(): Promise<SQLiteDatabase> {
   return db;
 }
 
-async function moveLegacyJournal(legacyName: string, sharedPath: string, containerDir: string) {
-  const legacyFile = new File(fileUri(`${defaultDatabaseDirectory}/${legacyName}`));
+async function moveLegacyJournal(sharedPath: string, containerDir: string) {
+  const legacyFile = new File(fileUri(legacyPath()));
   if (!legacyFile.exists) return;
 
-  const legacy = await openDatabaseAsync(legacyName);
+  const legacy = await openDatabaseAsync(DATABASE_NAME);
   let before: string;
   try {
     // Folds the WAL into the main file so a plain copy holds every row.
@@ -66,9 +78,15 @@ async function moveLegacyJournal(legacyName: string, sharedPath: string, contain
     await legacy.closeAsync();
   }
 
-  // What Siri wrote so far (test dictations) is set aside, never deleted.
-  // A dictation saving during these few milliseconds lands in that file: accepted.
   const stamp = Date.now();
+  // An empty old journal never replaces one already in the container.
+  if (before === "0/0" && new File(fileUri(sharedPath)).exists) {
+    setAside(legacyPath(), `kalor-moved-${stamp}.db`);
+    return;
+  }
+
+  // Whatever already sits in the container is set aside, never deleted.
+  // A Siri entry saved during these few milliseconds lands there: accepted.
   setAside(sharedPath, `kalor-before-move-${stamp}.db`);
   legacyFile.copy(new File(fileUri(sharedPath)));
 
@@ -83,7 +101,7 @@ async function moveLegacyJournal(legacyName: string, sharedPath: string, contain
   // move would otherwise bring the journal back to this day. The move itself
   // is done by now, so a failure here must not send the app back to the old file.
   try {
-    setAside(`${defaultDatabaseDirectory}/${legacyName}`, `kalor-moved-${stamp}.db`);
+    setAside(legacyPath(), `kalor-moved-${stamp}.db`);
   } catch (error) {
     console.warn("Old journal left in place", error);
   }

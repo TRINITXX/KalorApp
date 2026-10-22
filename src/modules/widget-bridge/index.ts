@@ -4,7 +4,7 @@ interface WidgetBridgeModule {
   getSharedContainerPath(): string | null;
   setWidgetData(jsonString: string): void;
   reloadWidgets(): void;
-  /** Added in build 1.1.0: missing on older builds. */
+  /** Linked from build 1.2.0 on: the whole module is missing before. */
   setSharedValue?(key: string, value: string): void;
 }
 
