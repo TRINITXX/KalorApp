@@ -19,6 +19,12 @@ public class WidgetBridgeModule: Module {
       defaults.set(jsonString, forKey: "dailySummary")
     }
 
+    // Generic string shared with the widget/Siri extension (e.g. "voiceConfig").
+    Function("setSharedValue") { (key: String, value: String) in
+      guard let defaults = UserDefaults(suiteName: appGroupId) else { return }
+      defaults.set(value, forKey: key)
+    }
+
     Function("reloadWidgets") {
       if #available(iOS 14.0, *) {
         WidgetCenter.shared.reloadAllTimelines()

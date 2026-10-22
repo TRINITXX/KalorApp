@@ -43,7 +43,7 @@ struct QuickMealIntent: AppIntent {
 
     func perform() async throws -> some IntentResult & ProvidesDialog {
         guard let helper = SQLiteHelper() else {
-            return .result(dialog: "Erreur: impossible d'acceder aux donnees")
+            return .result(dialog: "Erreur : impossible d'accéder aux données")
         }
 
         let allFavorites = helper.getFavorites()
@@ -62,14 +62,11 @@ struct QuickMealIntent: AppIntent {
         }
 
         guard !itemsToAdd.isEmpty else {
-            return .result(dialog: "Aucun aliment a ajouter")
+            return .result(dialog: "Aucun aliment à ajouter")
         }
 
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "yyyy-MM-dd"
-        let today = dateFormatter.string(from: Date())
-        let hour = Calendar.current.component(.hour, from: Date())
-        let meal = hour < 17 ? "lunch" : "dinner"
+        let today = MealRule.localDateString(Date())
+        let meal = MealRule.guess(entries: helper.mealRuleEntries(date: today), isToday: true)
 
         var totalCalories: Double = 0
 
@@ -97,29 +94,7 @@ struct QuickMealIntent: AppIntent {
             totalCalories += cal
         }
 
-        // Update widget — preserve existing goals from UserDefaults
-        var summary = helper.getDailySummary(date: today)
-        if let defaults = UserDefaults(suiteName: "group.com.kalorapp.app"),
-           let existingJson = defaults.string(forKey: "dailySummary"),
-           let existingData = existingJson.data(using: .utf8),
-           let existing = try? JSONDecoder().decode(DailySummary.self, from: existingData) {
-            summary = DailySummary(
-                date: summary.date,
-                calories: summary.calories, proteins: summary.proteins,
-                carbs: summary.carbs, fats: summary.fats,
-                fiber: summary.fiber, sugars: summary.sugars,
-                saturated_fat: summary.saturated_fat, salt: summary.salt,
-                caloriesGoal: existing.caloriesGoal, proteinsGoal: existing.proteinsGoal,
-                carbsGoal: existing.carbsGoal, fatsGoal: existing.fatsGoal,
-                fiberGoal: existing.fiberGoal, sugarsGoal: existing.sugarsGoal,
-                saturatedFatGoal: existing.saturatedFatGoal, saltGoal: existing.saltGoal
-            )
-        }
-        if let jsonData = try? JSONEncoder().encode(summary) {
-            UserDefaults(suiteName: "group.com.kalorapp.app")?
-                .set(String(data: jsonData, encoding: .utf8), forKey: "dailySummary")
-        }
-        WidgetCenter.shared.reloadAllTimelines()
+        WidgetRefresher.refreshToday(helper)
 
         let count = itemsToAdd.count
         return .result(dialog: "\(count) aliment\(count > 1 ? "s" : "") ajout\u{00e9}\(count > 1 ? "s" : "") \u{2014} \(Int(totalCalories)) kcal")

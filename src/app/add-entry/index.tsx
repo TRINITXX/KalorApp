@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -7,6 +7,8 @@ import * as Haptics from "expo-haptics";
 import Animated, { FadeIn, FadeOut, LinearTransition } from "react-native-reanimated";
 
 import { useDb } from "@/app/_layout";
+import { ListeningStrip } from "@/components/nutrition/listening-strip";
+import { VoiceBanner } from "@/components/nutrition/voice-banner";
 import { QuantityStepper } from "@/components/nutrition/quantity-stepper";
 import { QuickActions } from "@/components/nutrition/quick-actions";
 import { Card } from "@/components/ui/card";
@@ -21,11 +23,13 @@ import { useRefreshOnFocus } from "@/hooks/use-refresh-on-focus";
 import { useSingleNavigation } from "@/hooks/use-single-navigation";
 import { useThemeColors } from "@/hooks/use-theme-colors";
 import { useToday } from "@/hooks/use-today";
-import { formatDayTitle } from "@/lib/dates";
+import { useVoiceAdd } from "@/hooks/use-voice-add";
+import { addDays, formatDayTitle } from "@/lib/dates";
 import { logFoods } from "@/lib/log-foods";
 import { guessMeal } from "@/lib/meal-rule";
 import { formatNumber } from "@/lib/nutrition-utils";
 import { matchesQuery } from "@/lib/search";
+import type { VoiceDraft } from "@/lib/voice/run-voice";
 import { useCheckedProductsStore } from "@/stores/checked-products-store";
 import { useSettingsStore } from "@/stores/settings-store";
 import type { MealType } from "@/types/nutrition";
@@ -41,8 +45,10 @@ export default function AddEntryScreen() {
   const enabledMeals = useSettingsStore((s) => s.enabledMeals);
   const today = useToday();
 
-  const params = useLocalSearchParams<{ date?: string; meal?: string }>();
-  const date = params.date ?? today;
+  const params = useLocalSearchParams<{ date?: string; meal?: string; listen?: string }>();
+  // "Hier" said in a dictation moves the add to yesterday.
+  const [dateOverride, setDateOverride] = useState<string | null>(null);
+  const date = dateOverride ?? params.date ?? today;
   const forcedMeal = MEAL_VALUES.find((m) => m === params.meal);
 
   const [catalog, setCatalog] = useState<CatalogProduct[]>([]);
@@ -52,7 +58,29 @@ export default function AddEntryScreen() {
   const mealTouched = useRef(!!forcedMeal);
   const [query, setQuery] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [voiceInfo, setVoiceInfo] = useState<VoiceDraft | null>(null);
+  const [catalogLoaded, setCatalogLoaded] = useState(false);
   const navigate = useSingleNavigation();
+
+  const applyVoiceDraft = useCallback(
+    async (draft: VoiceDraft) => {
+      // Reload first: Claude's estimates were just saved as new products.
+      setCatalog(await getCatalog(db));
+      setSelection((prev) => ({ ...prev, ...draft.selection }));
+      if (draft.meal) {
+        mealTouched.current = true;
+        setMeal(draft.meal);
+      }
+      if (draft.dayOffset === -1 && (params.date ?? today) === today) {
+        setDateOverride(addDays(today, -1));
+      }
+      setVoiceInfo(draft);
+      setQuery("");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    },
+    [db, params.date, today],
+  );
+  const voice = useVoiceAdd(db, catalog, applyVoiceDraft);
 
   useRefreshOnFocus(
     useCallback(() => {
@@ -64,6 +92,7 @@ export default function AddEntryScreen() {
         ]);
         if (!active) return;
         setCatalog(products);
+        setCatalogLoaded(true);
         if (!mealTouched.current) {
           setMeal(guessMeal(dayEntries, { isToday: date === today }));
         }
@@ -86,6 +115,14 @@ export default function AddEntryScreen() {
       };
     }, [db, date, today]),
   );
+
+  // The day screen's microphone opens this screen with ?listen=1.
+  const autoListened = useRef(false);
+  useEffect(() => {
+    if (params.listen !== "1" || !catalogLoaded || autoListened.current || !voice.available) return;
+    autoListened.current = true;
+    void voice.start();
+  }, [catalogLoaded, params.listen, voice]);
 
   const byId = useMemo(() => new Map(catalog.map((p) => [p.id, p])), [catalog]);
 
@@ -179,6 +216,7 @@ export default function AddEntryScreen() {
             Ajout pour {dayLabel.toLowerCase()}
           </Text>
         )}
+        {voiceInfo && <VoiceBanner draft={voiceInfo} onClose={() => setVoiceInfo(null)} />}
         <SegmentedControl
           options={mealOptions}
           value={meal}
@@ -188,31 +226,57 @@ export default function AddEntryScreen() {
           }}
         />
 
-        <View
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            gap: 8,
-            backgroundColor: colors.card,
-            borderRadius: 10,
-            borderCurve: "continuous",
-            paddingHorizontal: 10,
-          }}
-        >
-          <SymbolView name="magnifyingglass" size={16} tintColor={colors.textSecondary} />
-          <TextInput
-            value={query}
-            onChangeText={setQuery}
-            placeholder="Chercher un produit"
-            placeholderTextColor={colors.textSecondary}
-            clearButtonMode="while-editing"
-            autoCorrect={false}
-            returnKeyType="search"
-            style={{ flex: 1, paddingVertical: 10, fontSize: 17, color: colors.textPrimary }}
+        {voice.phase ? (
+          <ListeningStrip
+            phase={voice.phase}
+            transcript={voice.transcript}
+            level={voice.level}
+            onFinish={() => void voice.finish()}
+            onCancel={voice.cancel}
           />
-        </View>
+        ) : (
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 8,
+              backgroundColor: colors.card,
+              borderRadius: 10,
+              borderCurve: "continuous",
+              paddingHorizontal: 10,
+            }}
+          >
+            <SymbolView name="magnifyingglass" size={16} tintColor={colors.textSecondary} />
+            <TextInput
+              value={query}
+              onChangeText={setQuery}
+              placeholder="Chercher un produit"
+              placeholderTextColor={colors.textSecondary}
+              clearButtonMode="while-editing"
+              autoCorrect={false}
+              returnKeyType="search"
+              style={{ flex: 1, paddingVertical: 10, fontSize: 17, color: colors.textPrimary }}
+            />
+            {voice.available && (
+              <Pressable
+                onPress={() => void voice.start()}
+                hitSlop={10}
+                accessibilityRole="button"
+                accessibilityLabel="Dicter ce que tu as mangé"
+              >
+                <SymbolView name="mic.fill" size={18} tintColor={colors.accent.caloriesText} />
+              </Pressable>
+            )}
+          </View>
+        )}
+        {voice.error && (
+          <Pressable onPress={voice.clearError} accessibilityRole="button">
+            <Text style={{ fontSize: 14, color: colors.accent.warning, marginHorizontal: 4 }}>{voice.error}</Text>
+          </Pressable>
+        )}
 
-        {!searching && <QuickActions query="mode=pick" />}
+        {/* Leaving for another screen mid-dictation would leave the microphone open. */}
+        {!searching && !voice.phase && <QuickActions query="mode=pick" />}
 
         {searching ? (
           searchResults.length > 0 ? (

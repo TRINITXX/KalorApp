@@ -17,6 +17,7 @@ import { useThemeColors } from "@/hooks/use-theme-colors";
 import { useSingleNavigation } from "@/hooks/use-single-navigation";
 import { useToday } from "@/hooks/use-today";
 import { addDays, formatDaySubtitle, formatDayTitle } from "@/lib/dates";
+import { voiceAvailable } from "@/lib/voice/native";
 import { useSettingsStore } from "@/stores/settings-store";
 import type { EntryRow } from "@/types/database";
 import type { Goals, MealType } from "@/types/nutrition";
@@ -77,11 +78,12 @@ export default function DayScreen() {
   const navigate = useSingleNavigation();
 
   const openAdd = useCallback(
-    (meal?: MealType) => {
+    (meal?: MealType, listen?: boolean) => {
       // No date for today: the add screen then follows the clock past midnight.
-      const params: { date?: string; meal?: MealType } = {};
+      const params: { date?: string; meal?: MealType; listen?: string } = {};
       if (!isToday) params.date = date;
       if (meal) params.meal = meal;
+      if (listen) params.listen = "1";
       navigate(() => router.push({ pathname: "/add-entry", params }));
     },
     [date, isToday, navigate],
@@ -170,11 +172,32 @@ export default function DayScreen() {
         {deleted && (
           <UndoToast message={`${deleted.product_name} supprimé`} onUndo={handleUndo} />
         )}
-        <PrimaryButton
-          label={isToday ? "Ajouter" : `Ajouter à ${formatDayTitle(date, today).toLowerCase()}`}
-          onPress={() => openAdd()}
-          style={{ boxShadow: "0px 6px 18px rgba(0,0,0,0.25)" }}
-        />
+        <View style={{ flexDirection: "row", gap: 10 }}>
+          <PrimaryButton
+            label={isToday ? "Ajouter" : `Ajouter à ${formatDayTitle(date, today).toLowerCase()}`}
+            onPress={() => openAdd()}
+            style={{ flex: 1, boxShadow: "0px 6px 18px rgba(0,0,0,0.25)" }}
+          />
+          {voiceAvailable && (
+            <PressableScale
+              onPress={() => openAdd(undefined, true)}
+              scaleTo={0.92}
+              accessibilityRole="button"
+              accessibilityLabel="Dicter ce que tu as mangé"
+              style={{
+                width: 50,
+                height: 50,
+                borderRadius: 25,
+                backgroundColor: colors.card,
+                alignItems: "center",
+                justifyContent: "center",
+                boxShadow: "0px 6px 18px rgba(0,0,0,0.25)",
+              }}
+            >
+              <SymbolView name="mic.fill" size={20} tintColor={colors.accent.caloriesText} />
+            </PressableScale>
+          )}
+        </View>
       </View>
     </View>
   );

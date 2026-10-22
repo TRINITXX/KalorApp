@@ -6,7 +6,9 @@ import type { SQLiteDatabase } from "expo-sqlite";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 import { openSharedDatabase } from "@/db/client";
+import { useResolvedTheme } from "@/hooks/use-theme-colors";
 import { useSettingsStore } from "@/stores/settings-store";
+import { syncSiriVoiceConfig } from "@/lib/voice/siri-config";
 import { syncWidgetData } from "@/lib/widget-sync";
 
 const DbContext = createContext<SQLiteDatabase | null>(null);
@@ -18,7 +20,7 @@ export function useDb(): SQLiteDatabase {
 }
 
 export default function RootLayout() {
-  const theme = useSettingsStore((s) => s.theme);
+  const theme = useResolvedTheme();
   const background = theme === "dark" ? "#000000" : "#f2f2f7";
   const [db, setDb] = useState<SQLiteDatabase | null>(null);
 
@@ -32,6 +34,7 @@ export default function RootLayout() {
         });
       }
       syncWidgetData(database).catch(console.warn);
+      syncSiriVoiceConfig();
     });
   }, []);
 

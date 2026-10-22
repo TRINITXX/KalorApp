@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Alert, Pressable, ScrollView, Switch, Text, TextInput, View } from "react-native";
 import { File, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
@@ -6,10 +6,14 @@ import * as Sharing from "expo-sharing";
 import { useDb } from "@/app/_layout";
 import { parseNumericInput } from "@/components/nutrition/numeric-field";
 import { Card } from "@/components/ui/card";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import { MEALS } from "@/constants/meals";
 import { getAllEntriesForExport } from "@/db/queries/entries";
 import { useThemeColors, type ThemeColors } from "@/hooks/use-theme-colors";
 import { exportEntriesCsv } from "@/lib/nutrition-utils";
+import { getApiKey, saveApiKey } from "@/lib/voice/api-key";
+import { checkApiKey } from "@/lib/voice/claude";
+import { voiceAvailable } from "@/lib/voice/native";
 import { useSettingsStore } from "@/stores/settings-store";
 import type { Goals } from "@/types/nutrition";
 
@@ -160,20 +164,133 @@ function MealsSection() {
 // ---------- Appearance ----------
 
 function AppearanceSection() {
-  const colors = useThemeColors();
   const theme = useSettingsStore((s) => s.theme);
   const setTheme = useSettingsStore((s) => s.setTheme);
 
   return (
-    <Section title="Apparence">
-      <Row first>
-        <Text style={{ flex: 1, fontSize: 17, color: colors.textPrimary }}>Mode sombre</Text>
-        <Switch
-          value={theme === "dark"}
-          onValueChange={(v) => setTheme(v ? "dark" : "light")}
-          {...greenSwitch(colors)}
+    <Section title="Apparence" footer="Auto suit le mode clair ou sombre de l'iPhone.">
+      <View style={{ padding: 8 }}>
+        <SegmentedControl
+          options={[
+            { value: "system", label: "Auto" },
+            { value: "dark", label: "Sombre" },
+            { value: "light", label: "Clair" },
+          ]}
+          value={theme}
+          onChange={setTheme}
         />
-      </Row>
+      </View>
+    </Section>
+  );
+}
+
+// ---------- Dictation ----------
+
+const maskKey = (key: string) => `${key.slice(0, 7)}…${key.slice(-4)}`;
+
+const KEY_CHECK_ALERTS: Record<"bad-key" | "network" | "unavailable", [string, string]> = {
+  "bad-key": ["Clé refusée", "Anthropic ne reconnaît pas cette clé. Vérifie-la sur console.anthropic.com."],
+  network: ["Pas de réseau", "La clé n'a pas pu être vérifiée. Réessaie une fois connecté."],
+  unavailable: ["Anthropic ne répond pas", "La clé n'a pas pu être vérifiée pour l'instant. Réessaie dans un moment."],
+};
+
+function DictationSection() {
+  const colors = useThemeColors();
+  const [savedKey, setSavedKey] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [checking, setChecking] = useState(false);
+
+  useEffect(() => {
+    if (voiceAvailable) getApiKey().then(setSavedKey);
+  }, []);
+
+  const close = () => {
+    setEditing(false);
+    setDraft("");
+  };
+
+  const save = useCallback(async () => {
+    const key = draft.trim();
+    try {
+      if (key === "") {
+        await saveApiKey("");
+        setSavedKey(null);
+        close();
+        return;
+      }
+      setChecking(true);
+      const result = await checkApiKey(key);
+      setChecking(false);
+      if (result !== "ok") {
+        Alert.alert(...KEY_CHECK_ALERTS[result]);
+        return;
+      }
+      await saveApiKey(key);
+      setSavedKey(key);
+      close();
+    } catch {
+      setChecking(false);
+      Alert.alert("Clé non enregistrée", "Le trousseau de l'iPhone a refusé la clé. Réessaie.");
+    }
+  }, [draft]);
+
+  if (!voiceAvailable) {
+    return (
+      <Section title="Dictée">
+        <Row first>
+          <Text style={{ flex: 1, fontSize: 15, color: colors.textSecondary }}>
+            La dictée arrive avec la prochaine installation de l'app.
+          </Text>
+        </Row>
+      </Section>
+    );
+  }
+
+  return (
+    <Section
+      title="Dictée"
+      footer="Crée une clé sur console.anthropic.com et pose-lui un plafond de dépense mensuel. Elle reste dans le trousseau de l'iPhone. Claude Sonnet 5.5 trie tes dictées : environ 1 $ par mois."
+    >
+      {editing ? (
+        <>
+          <Row first>
+            <TextInput
+              value={draft}
+              onChangeText={setDraft}
+              placeholder="sk-ant-…"
+              placeholderTextColor={colors.textMuted}
+              secureTextEntry
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoFocus
+              style={{ flex: 1, fontSize: 17, color: colors.textPrimary, paddingVertical: 4 }}
+            />
+          </Row>
+          <Row>
+            <Pressable onPress={close} disabled={checking} hitSlop={8} style={{ flex: 1 }}>
+              <Text style={{ fontSize: 17, color: checking ? colors.textMuted : colors.textSecondary }}>Annuler</Text>
+            </Pressable>
+            <Pressable onPress={() => void save()} disabled={checking} hitSlop={8}>
+              <Text style={{ fontSize: 17, fontWeight: "600", color: colors.accent.caloriesText }}>
+                {checking ? "Vérification…" : draft.trim() === "" && savedKey ? "Effacer la clé" : "Enregistrer"}
+              </Text>
+            </Pressable>
+          </Row>
+        </>
+      ) : (
+        <Pressable
+          onPress={() => setEditing(true)}
+          style={({ pressed }) => ({ backgroundColor: pressed ? colors.fill : "transparent" })}
+        >
+          <Row first>
+            <Text style={{ flex: 1, fontSize: 17, color: colors.textPrimary }}>Clé Claude</Text>
+            <Text style={{ fontSize: 15, color: savedKey ? colors.textSecondary : colors.accent.warning }}>
+              {savedKey ? maskKey(savedKey) : "À ajouter"}
+            </Text>
+          </Row>
+        </Pressable>
+      )}
     </Section>
   );
 }
@@ -241,6 +358,7 @@ export default function SettingsScreen() {
     >
       <GoalsSection />
       <MealsSection />
+      <DictationSection />
       <AppearanceSection />
       <ExportSection />
     </ScrollView>

@@ -4,11 +4,13 @@ import { zustandMMKVStorage } from "@/lib/storage/app-storage";
 import { SETTINGS_VERSION, migrateSettings } from "@/stores/settings-migrations";
 import type { Goals, MealType } from "@/types/nutrition";
 
+export type ThemeSetting = "system" | "dark" | "light";
+
 interface SettingsState {
-  theme: "dark" | "light";
+  theme: ThemeSetting;
   enabledMeals: Record<MealType, boolean>;
   goals: Goals;
-  setTheme: (theme: "dark" | "light") => void;
+  setTheme: (theme: ThemeSetting) => void;
   toggleMeal: (meal: MealType) => void;
   setGoals: (goals: Partial<Goals>) => void;
 }
@@ -27,7 +29,7 @@ const DEFAULT_GOALS: Goals = {
 export const useSettingsStore = create<SettingsState>()(
   persist(
     (set) => ({
-      theme: "dark",
+      theme: "system",
       enabledMeals: {
         breakfast: false,
         lunch: true,

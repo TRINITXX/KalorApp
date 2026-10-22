@@ -4,6 +4,8 @@ interface WidgetBridgeModule {
   getSharedContainerPath(): string | null;
   setWidgetData(jsonString: string): void;
   reloadWidgets(): void;
+  /** Added in build 1.1.0: missing on older builds. */
+  setSharedValue?(key: string, value: string): void;
 }
 
 const isIOS = Platform.OS === "ios";
@@ -27,4 +29,9 @@ export function setWidgetData(jsonString: string): void {
 
 export function reloadWidgets(): void {
   NativeModule?.reloadWidgets();
+}
+
+/** Writes a string the Siri extension reads from the app group. */
+export function setSharedValue(key: string, value: string): void {
+  NativeModule?.setSharedValue?.(key, value);
 }

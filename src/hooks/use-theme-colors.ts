@@ -1,12 +1,21 @@
 import { useMemo } from "react";
+import { useColorScheme } from "react-native";
 
 import { COLORS } from "@/constants/theme";
 import { useSettingsStore } from "@/stores/settings-store";
 
 export type ThemeColors = ReturnType<typeof useThemeColors>;
 
+/** "dark" or "light" once the "follow the iPhone" setting is resolved. */
+export function useResolvedTheme(): "dark" | "light" {
+  const setting = useSettingsStore((s) => s.theme);
+  const system = useColorScheme();
+  if (setting === "system") return system === "light" ? "light" : "dark";
+  return setting;
+}
+
 export function useThemeColors() {
-  const theme = useSettingsStore((s) => s.theme);
+  const theme = useResolvedTheme();
   return useMemo(
     () => ({
       ...COLORS[theme],

@@ -5,13 +5,15 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   name: "KalorApp",
   slug: "KalorApp",
   scheme: "kalorapp",
-  version: "1.0.0",
+  // runtimeVersion follows this version: bump it with every native change, so
+  // over-the-air updates never reach a build that lacks their native modules.
+  version: "1.1.0",
   updates: {
     url: "https://u.expo.dev/0342d525-6026-4429-bb49-c677043f1f19",
   },
   orientation: "portrait",
   icon: "./assets/icon.png",
-  userInterfaceStyle: "light",
+  userInterfaceStyle: "automatic",
   splash: {
     image: "./assets/splash-icon.png",
     resizeMode: "contain",
@@ -30,6 +32,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     },
     entitlements: {
       "com.apple.security.application-groups": ["group.com.kalorapp.app"],
+      // First group = default group: the Claude key lands where Siri can read it.
+      "keychain-access-groups": ["$(AppIdentifierPrefix)com.kalorapp.shared"],
     },
   },
   android: {
@@ -49,6 +53,16 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     "expo-sqlite",
     "expo-image",
     "expo-sharing",
+    "expo-secure-store",
+    [
+      "expo-speech-recognition",
+      {
+        microphonePermission:
+          "KalorApp écoute ta voix quand tu touches le micro, pour noter ce que tu as mangé.",
+        speechRecognitionPermission:
+          "KalorApp transforme ta voix en texte pour retrouver les aliments que tu dictes.",
+      },
+    ],
     "@bacons/apple-targets",
   ],
   experiments: {

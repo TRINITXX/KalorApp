@@ -76,10 +76,11 @@ class SQLiteHelper {
         return result
     }
 
+    @discardableResult
     func insertEntry(productId: String, productName: String, meal: String,
                      quantity: Double, date: String,
                      calories: Double, proteins: Double, carbs: Double, fats: Double,
-                     fiber: Double?, sugars: Double?, saturatedFat: Double?, salt: Double?) {
+                     fiber: Double?, sugars: Double?, saturatedFat: Double?, salt: Double?) -> Bool {
         var stmt: OpaquePointer?
         let sql = """
             INSERT INTO entries (product_id, product_name, meal, quantity, date,
@@ -87,7 +88,7 @@ class SQLiteHelper {
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """
 
-        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return false }
 
         sqlite3_bind_text(stmt, 1, (productId as NSString).utf8String, -1, nil)
         sqlite3_bind_text(stmt, 2, (productName as NSString).utf8String, -1, nil)
@@ -104,8 +105,9 @@ class SQLiteHelper {
         if let saturatedFat { sqlite3_bind_double(stmt, 12, saturatedFat) } else { sqlite3_bind_null(stmt, 12) }
         if let salt { sqlite3_bind_double(stmt, 13, salt) } else { sqlite3_bind_null(stmt, 13) }
 
-        sqlite3_step(stmt)
+        let ok = sqlite3_step(stmt) == SQLITE_DONE
         sqlite3_finalize(stmt)
+        return ok
     }
 
     func updateLastQuantity(productId: String, quantity: Double) {
@@ -153,5 +155,124 @@ class SQLiteHelper {
 
         sqlite3_finalize(stmt)
         return summary
+    }
+
+    // MARK: - Dictation (mirror of src/db/queries/products.ts and entries.ts)
+
+    struct CatalogProduct {
+        let id: String
+        let name: String
+        let brand: String?
+        let calories: Double
+        let proteins: Double
+        let carbs: Double
+        let fats: Double
+        let fiber: Double?
+        let sugars: Double?
+        let saturatedFat: Double?
+        let salt: Double?
+        let lastQuantity: Double
+        let isFavorite: Bool
+        let favoriteQuantity: Double?
+
+        /// Usual portion: the favorite's quantity, else the last one eaten, else 100 g.
+        var portion: Double {
+            if let q = favoriteQuantity, q > 0 { return q }
+            return lastQuantity > 0 ? lastQuantity : 100
+        }
+    }
+
+    private func optionalDouble(_ stmt: OpaquePointer?, _ column: Int32) -> Double? {
+        sqlite3_column_type(stmt, column) == SQLITE_NULL ? nil : sqlite3_column_double(stmt, column)
+    }
+
+    private func optionalText(_ stmt: OpaquePointer?, _ column: Int32) -> String? {
+        guard sqlite3_column_type(stmt, column) != SQLITE_NULL, let text = sqlite3_column_text(stmt, column) else {
+            return nil
+        }
+        return String(cString: text)
+    }
+
+    /// Every product, favorites first, then by name.
+    func getCatalog() -> [CatalogProduct] {
+        var result: [CatalogProduct] = []
+        var stmt: OpaquePointer?
+        let sql = """
+            SELECT p.id, p.name, p.brand, p.calories, p.proteins, p.carbs, p.fats,
+                   p.fiber, p.sugars, p.saturated_fat, p.salt, p.last_quantity,
+                   f.product_id IS NOT NULL, f.quantity
+            FROM products p LEFT JOIN favorites f ON f.product_id = p.id
+            """
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return [] }
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            guard let id = optionalText(stmt, 0), let name = optionalText(stmt, 1) else { continue }
+            result.append(CatalogProduct(
+                id: id, name: name, brand: optionalText(stmt, 2),
+                calories: sqlite3_column_double(stmt, 3),
+                proteins: sqlite3_column_double(stmt, 4),
+                carbs: sqlite3_column_double(stmt, 5),
+                fats: sqlite3_column_double(stmt, 6),
+                fiber: optionalDouble(stmt, 7),
+                sugars: optionalDouble(stmt, 8),
+                saturatedFat: optionalDouble(stmt, 9),
+                salt: optionalDouble(stmt, 10),
+                lastQuantity: optionalDouble(stmt, 11) ?? 100,
+                isFavorite: sqlite3_column_int(stmt, 12) != 0,
+                favoriteQuantity: optionalDouble(stmt, 13)
+            ))
+        }
+        sqlite3_finalize(stmt)
+        return result.sorted {
+            if $0.isFavorite != $1.isFavorite { return $0.isFavorite }
+            return $0.name.localizedStandardCompare($1.name) == .orderedAscending
+        }
+    }
+
+    /// Saves a food Claude had to estimate: not a favorite, marked "estimated".
+    @discardableResult
+    func insertEstimatedProduct(id: String, name: String, category: String,
+                                calories: Double, proteins: Double, carbs: Double, fats: Double,
+                                lastQuantity: Double) -> Bool {
+        var stmt: OpaquePointer?
+        let sql = """
+            INSERT INTO products (id, name, brand, image_url, source, calories, proteins, carbs, fats,
+                                  fiber, sugars, saturated_fat, salt, last_quantity, category)
+            VALUES (?, ?, NULL, NULL, 'estimated', ?, ?, ?, ?, NULL, NULL, NULL, NULL, ?, ?)
+            """
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return false }
+        sqlite3_bind_text(stmt, 1, (id as NSString).utf8String, -1, nil)
+        sqlite3_bind_text(stmt, 2, (name as NSString).utf8String, -1, nil)
+        sqlite3_bind_double(stmt, 3, calories)
+        sqlite3_bind_double(stmt, 4, proteins)
+        sqlite3_bind_double(stmt, 5, carbs)
+        sqlite3_bind_double(stmt, 6, fats)
+        sqlite3_bind_double(stmt, 7, lastQuantity)
+        sqlite3_bind_text(stmt, 8, (category as NSString).utf8String, -1, nil)
+        let ok = sqlite3_step(stmt) == SQLITE_DONE
+        sqlite3_finalize(stmt)
+        return ok
+    }
+
+    /// Meal and creation time of a day's entries, for MealRule.
+    func mealRuleEntries(date: String) -> [(meal: String, createdAt: Date)] {
+        var result: [(meal: String, createdAt: Date)] = []
+        var stmt: OpaquePointer?
+        let sql = "SELECT meal, created_at FROM entries WHERE date = ?"
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return [] }
+        sqlite3_bind_text(stmt, 1, (date as NSString).utf8String, -1, nil)
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            guard let meal = optionalText(stmt, 0),
+                  let raw = optionalText(stmt, 1),
+                  let createdAt = MealRule.parseSqliteUtc(raw)
+            else { continue }
+            result.append((meal: meal, createdAt: createdAt))
+        }
+        sqlite3_finalize(stmt)
+        return result
+    }
+
+    @discardableResult
+    func execute(_ sql: String) -> Bool {
+        sqlite3_exec(db, sql, nil, nil, nil) == SQLITE_OK
     }
 }
