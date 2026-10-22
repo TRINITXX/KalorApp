@@ -36,7 +36,8 @@ class SQLiteHelper {
         let sugars: Double?
         let saturatedFat: Double?
         let salt: Double?
-        let lastQuantity: Double
+        /// Usual portion, as defaultPortion() in src/db/queries/products.ts.
+        let portion: Double
     }
 
     func getFavorites() -> [FavoriteProduct] {
@@ -45,7 +46,8 @@ class SQLiteHelper {
 
         let sql = """
             SELECT p.id, p.name, p.brand, p.calories, p.proteins, p.carbs, p.fats,
-                   p.fiber, p.sugars, p.saturated_fat, p.salt, p.last_quantity
+                   p.fiber, p.sugars, p.saturated_fat, p.salt,
+                   COALESCE(NULLIF(f.quantity, 0), NULLIF(p.last_quantity, 0), 100)
             FROM favorites f INNER JOIN products p ON p.id = f.product_id
             ORDER BY f.sort_order ASC
             """
@@ -68,7 +70,7 @@ class SQLiteHelper {
                 sugars: sqlite3_column_type(stmt, 8) != SQLITE_NULL ? sqlite3_column_double(stmt, 8) : nil,
                 saturatedFat: sqlite3_column_type(stmt, 9) != SQLITE_NULL ? sqlite3_column_double(stmt, 9) : nil,
                 salt: sqlite3_column_type(stmt, 10) != SQLITE_NULL ? sqlite3_column_double(stmt, 10) : nil,
-                lastQuantity: sqlite3_column_double(stmt, 11)
+                portion: sqlite3_column_double(stmt, 11)
             ))
         }
 

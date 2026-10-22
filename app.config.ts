@@ -7,7 +7,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   scheme: "kalorapp",
   // runtimeVersion follows this version: bump it with every native change, so
   // over-the-air updates never reach a build that lacks their native modules.
-  version: "1.2.0",
+  version: "1.3.0",
   updates: {
     url: "https://u.expo.dev/0342d525-6026-4429-bb49-c677043f1f19",
   },

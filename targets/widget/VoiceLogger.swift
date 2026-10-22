@@ -23,8 +23,13 @@ enum VoiceLogger {
         }
     }
 
+    struct AddedFood {
+        let name: String
+        let grams: Double
+    }
+
     struct Outcome {
-        let count: Int
+        let foods: [AddedFood]
         let calories: Double
         let meal: String
         let yesterday: Bool
@@ -33,15 +38,12 @@ enum VoiceLogger {
 
         /// What Siri says back.
         var sentence: String {
-            guard count > 0 else {
+            guard !foods.isEmpty else {
                 return notUnderstood.isEmpty
                     ? "Je n'ai reconnu aucun aliment."
                     : "Je n'ai reconnu aucun aliment dans : \(notUnderstood.joined(separator: ", "))."
             }
-            let foods = count > 1 ? "\(count) aliments ajoutés" : "1 aliment ajouté"
-            let mealName = MealRule.frenchNames[meal] ?? ""
-            let day = yesterday ? " d'hier" : ""
-            var text = "\(foods) \(mealName)\(day), \(Int(calories.rounded())) kilocalories."
+            var text = VoiceLogger.addedSentence(foods: foods, meal: meal, yesterday: yesterday, calories: calories)
             if !estimatedNames.isEmpty {
                 text += " Estimé par Claude : \(estimatedNames.joined(separator: ", "))."
             }
@@ -80,12 +82,28 @@ enum VoiceLogger {
     private static let categories: Set<String> = ["meat", "side", "seasoning", "dessert"]
     private static let meals: Set<String> = ["breakfast", "lunch", "snack", "dinner"]
 
-    private static func round1(_ value: Double) -> Double { (value * 10).rounded() / 10 }
+    /// Rounds like entryNutrition() in src/lib/nutrition-utils.ts.
+    static func round1(_ value: Double) -> Double { (value * 10).rounded() / 10 }
 
     /// "180" or "12.5", like `fmt` in src/lib/voice/prompt.ts.
     private static func fmt(_ value: Double) -> String {
         let rounded = round1(value)
         return rounded == rounded.rounded() ? String(Int(rounded)) : String(format: "%.1f", rounded)
+    }
+
+    /// What Siri says once foods are in the journal, e.g.
+    /// "Ajouté au dîner : Pâtes 200 grammes et Jambon 30 grammes. 350 kilocalories."
+    static func addedSentence(foods: [AddedFood], meal: String, yesterday: Bool, calories: Double) -> String {
+        let parts = foods.map { food -> String in
+            let grams = fmt(food.grams).replacingOccurrences(of: ".", with: ",")
+            return "\(food.name) \(grams) \(round1(food.grams) < 2 ? "gramme" : "grammes")"
+        }
+        let list = parts.count > 1
+            ? parts.dropLast().joined(separator: ", ") + " et " + parts[parts.count - 1]
+            : parts.joined()
+        let mealName = MealRule.frenchNames[meal].map { " \($0)" } ?? ""
+        let day = yesterday ? " d'hier" : ""
+        return "Ajouté\(mealName)\(day) : \(list). \(Int(calories.rounded())) kilocalories."
     }
 
     static func log(transcript: String) async throws -> Outcome {
@@ -162,7 +180,7 @@ enum VoiceLogger {
         let meal = reply.meal.flatMap { meals.contains($0) ? $0 : nil }
             ?? MealRule.guess(entries: helper.mealRuleEntries(date: date), isToday: !yesterday)
 
-        var count = 0
+        var foods: [AddedFood] = []
         var calories = 0.0
         var estimatedNames: [String] = []
         var notUnderstood = reply.not_understood
@@ -191,7 +209,7 @@ enum VoiceLogger {
                 )
                 helper.updateLastQuantity(productId: product.id, quantity: grams)
                 calories += round1(product.calories * factor)
-                count += 1
+                foods.append(AddedFood(name: product.name, grams: grams))
             } else if let draft = item.new_product,
                       !draft.name.trimmingCharacters(in: .whitespaces).isEmpty {
                 let id = "estimated-\(stamp)-\(i)"
@@ -216,7 +234,7 @@ enum VoiceLogger {
                 )
                 calories += round1(kcal * factor)
                 estimatedNames.append(name)
-                count += 1
+                foods.append(AddedFood(name: name, grams: grams))
             } else {
                 notUnderstood.append(item.spoken)
             }
@@ -228,7 +246,7 @@ enum VoiceLogger {
 
         WidgetRefresher.refreshToday(helper)
         return Outcome(
-            count: count, calories: calories, meal: meal, yesterday: yesterday,
+            foods: foods, calories: calories, meal: meal, yesterday: yesterday,
             estimatedNames: estimatedNames, notUnderstood: notUnderstood
         )
     }

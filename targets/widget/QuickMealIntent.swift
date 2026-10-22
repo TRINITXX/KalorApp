@@ -12,7 +12,7 @@ struct FavoriteEntity: AppEntity {
 
     let name: String
     let brand: String?
-    let lastQuantity: Double
+    let portion: Double
 }
 
 struct FavoriteEntityQuery: EntityQuery {
@@ -21,14 +21,14 @@ struct FavoriteEntityQuery: EntityQuery {
         let all = helper.getFavorites()
         return identifiers.compactMap { id in
             guard let fav = all.first(where: { $0.id == id }) else { return nil }
-            return FavoriteEntity(id: fav.id, name: fav.name, brand: fav.brand, lastQuantity: fav.lastQuantity)
+            return FavoriteEntity(id: fav.id, name: fav.name, brand: fav.brand, portion: fav.portion)
         }
     }
 
     func suggestedEntities() async throws -> [FavoriteEntity] {
         guard let helper = SQLiteHelper() else { return [] }
         return helper.getFavorites().map {
-            FavoriteEntity(id: $0.id, name: $0.name, brand: $0.brand, lastQuantity: $0.lastQuantity)
+            FavoriteEntity(id: $0.id, name: $0.name, brand: $0.brand, portion: $0.portion)
         }
     }
 }
@@ -69,34 +69,39 @@ struct QuickMealIntent: AppIntent {
         let meal = MealRule.guess(entries: helper.mealRuleEntries(date: today), isToday: true)
 
         var totalCalories: Double = 0
+        var foods: [VoiceLogger.AddedFood] = []
+        let round1 = VoiceLogger.round1
 
+        // All or nothing: Siri must never announce food that is not in the journal.
+        guard helper.execute("BEGIN") else {
+            return .result(dialog: "\(VoiceLogger.Failure.database.message)")
+        }
+        var written = true
         for product in itemsToAdd {
-
-            let qty = product.lastQuantity
+            let qty = product.portion
             let factor = qty / 100.0
+            let cal = round1(product.calories * factor)
 
-            let cal = product.calories * factor
-            let prot = product.proteins * factor
-            let carb = product.carbs * factor
-            let fat = product.fats * factor
-            let fib = product.fiber.map { $0 * factor }
-            let sug = product.sugars.map { $0 * factor }
-            let sat = product.saturatedFat.map { $0 * factor }
-            let slt = product.salt.map { $0 * factor }
-
-            helper.insertEntry(
+            written = written && helper.insertEntry(
                 productId: product.id, productName: product.name, meal: meal,
                 quantity: qty, date: today,
-                calories: cal, proteins: prot, carbs: carb, fats: fat,
-                fiber: fib, sugars: sug, saturatedFat: sat, salt: slt
+                calories: cal, proteins: round1(product.proteins * factor),
+                carbs: round1(product.carbs * factor), fats: round1(product.fats * factor),
+                fiber: product.fiber.map { round1($0 * factor) }, sugars: product.sugars.map { round1($0 * factor) },
+                saturatedFat: product.saturatedFat.map { round1($0 * factor) }, salt: product.salt.map { round1($0 * factor) }
             )
-
+            // Like every add in the app (src/lib/log-foods.ts).
+            helper.updateLastQuantity(productId: product.id, quantity: qty)
             totalCalories += cal
+            foods.append(VoiceLogger.AddedFood(name: product.name, grams: qty))
+        }
+        guard written, helper.execute("COMMIT") else {
+            helper.execute("ROLLBACK")
+            return .result(dialog: "\(VoiceLogger.Failure.database.message)")
         }
 
         WidgetRefresher.refreshToday(helper)
-
-        let count = itemsToAdd.count
-        return .result(dialog: "\(count) aliment\(count > 1 ? "s" : "") ajout\u{00e9}\(count > 1 ? "s" : "") \u{2014} \(Int(totalCalories)) kcal")
+        let sentence = VoiceLogger.addedSentence(foods: foods, meal: meal, yesterday: false, calories: totalCalories)
+        return .result(dialog: "\(sentence)")
     }
 }
