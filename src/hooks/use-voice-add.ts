@@ -23,7 +23,11 @@ export function useVoiceAdd(
     () => [...catalog].sort((a, b) => b.is_favorite - a.is_favorite).map((p) => p.name),
     [catalog],
   );
-  const dictation = useDictation(hints);
+  // finish() is defined below: the stop word reaches it through a ref.
+  const finishRef = useRef<(byStopWord: boolean) => void>(() => {});
+  const dictation = useDictation(hints, () => finishRef.current(true));
+  // One dictation, one request: "stop" and the button can both fire.
+  const finishing = useRef(false);
   const [thinking, setThinking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Claude may answer after the screen closed: then nothing is saved or shown.
@@ -44,30 +48,48 @@ export function useVoiceAdd(
     await dictation.start();
   }, [dictation]);
 
-  const finish = useCallback(async () => {
-    const transcript = (await dictation.finish()).trim();
-    if (transcript === "") {
-      setError("Je n'ai rien entendu. Réessaie en parlant près du téléphone.");
-      return;
-    }
-    setThinking(true);
-    try {
-      const meal = await interpretDictation(db, transcript);
-      if (!mounted.current) return;
-      await onDraft(await prepareVoiceDraft(db, meal, transcript));
-    } catch (e) {
-      if (!mounted.current) return;
-      setError(
-        e instanceof ClaudeError
-          ? CLAUDE_ERROR_MESSAGES[e.kind]
-          : e instanceof VoiceReplyError
-            ? CLAUDE_ERROR_MESSAGES["invalid-reply"]
-            : "La dictée a échoué. Réessaie.",
-      );
-    } finally {
-      if (mounted.current) setThinking(false);
-    }
-  }, [db, dictation, onDraft]);
+  const sortTranscript = useCallback(
+    async (transcript: string, byStopWord: boolean) => {
+      if (transcript === "") {
+        // "Stop" said alone is a change of mind, not a failure.
+        if (!byStopWord) setError("Je n'ai rien entendu. Réessaie en parlant près du téléphone.");
+        return;
+      }
+      setThinking(true);
+      try {
+        const meal = await interpretDictation(db, transcript);
+        if (!mounted.current) return;
+        await onDraft(await prepareVoiceDraft(db, meal, transcript));
+      } catch (e) {
+        if (!mounted.current) return;
+        setError(
+          e instanceof ClaudeError
+            ? CLAUDE_ERROR_MESSAGES[e.kind]
+            : e instanceof VoiceReplyError
+              ? CLAUDE_ERROR_MESSAGES["invalid-reply"]
+              : "La dictée a échoué. Réessaie.",
+        );
+      } finally {
+        if (mounted.current) setThinking(false);
+      }
+    },
+    [db, onDraft],
+  );
+
+  const finish = useCallback(
+    async (byStopWord = false) => {
+      if (finishing.current) return;
+      finishing.current = true;
+      try {
+        await sortTranscript((await dictation.finish()).trim(), byStopWord);
+      } finally {
+        finishing.current = false;
+      }
+    },
+    [dictation, sortTranscript],
+  );
+
+  finishRef.current = (byStopWord) => void finish(byStopWord);
 
   const phase: "listening" | "stopping" | "thinking" | null = thinking
     ? "thinking"
@@ -83,7 +105,11 @@ export function useVoiceAdd(
     error: error ?? dictation.error,
     start,
     finish,
-    cancel: dictation.cancel,
+    // A cancel while stopping leaves finish() waiting forever: reopen the lock.
+    cancel: () => {
+      finishing.current = false;
+      dictation.cancel();
+    },
     clearError: () => {
       setError(null);
       dictation.clearError();

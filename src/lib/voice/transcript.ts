@@ -38,3 +38,46 @@ function joinWords(a: string, b: string): string {
   if (b.trim() === "") return a.trim();
   return `${a.trim()} ${b.trim()}`;
 }
+
+// Said at the end of a dictation to finish it hands-free. Only words that never
+// end a food: "fini" or "terminé" would cut "j'ai fini les lasagnes".
+// No : without the u flag it splits accented words ("défini").
+const STOP_WORDS = /(^|[\s,.;:!?…])(stop|c'est tout)[\s.,;:!?…]*$/i;
+
+const straight = (text: string) => text.replace(/’/g, "'");
+
+/** True when the dictation ends with "stop" or "c'est tout". */
+export function endsWithStopWord(text: string): boolean {
+  return STOP_WORDS.test(straight(text));
+}
+
+/** The dictation without its closing stop word. */
+export function withoutStopWord(text: string): string {
+  const t = straight(text);
+  const match = STOP_WORDS.exec(t);
+  return (match ? t.slice(0, match.index + match[1].length) : t).replace(/[\s,;:]+$/, "").trim();
+}
+
+/**
+ * Finishes the dictation once "stop" has stayed the last word for `delayMs`.
+ * The countdown starts at the first result ending with the stop word and is
+ * not restarted by repeats of it: only words said after "stop" cancel it.
+ */
+export function createStopWordWatcher(onStop: () => void, delayMs: number) {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const clear = () => {
+    if (timer) clearTimeout(timer);
+    timer = null;
+  };
+  return {
+    update(text: string) {
+      if (!endsWithStopWord(text)) return clear();
+      if (timer) return;
+      timer = setTimeout(() => {
+        timer = null;
+        onStop();
+      }, delayMs);
+    },
+    clear,
+  };
+}
