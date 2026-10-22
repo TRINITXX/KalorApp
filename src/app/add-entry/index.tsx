@@ -1,847 +1,363 @@
-import { useCallback, useMemo, useState } from "react";
-import {
-  ActivityIndicator,
-  Pressable,
-  ScrollView,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
-import { useFocusEffect, useRouter } from "expo-router";
-import { Image, type ImageStyle } from "expo-image";
+import { useCallback, useMemo, useRef, useState } from "react";
+import { Alert, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SymbolView } from "expo-symbols";
 import * as Haptics from "expo-haptics";
+import Animated, { FadeIn, FadeOut, LinearTransition } from "react-native-reanimated";
 
 import { useDb } from "@/app/_layout";
+import { QuantityStepper } from "@/components/nutrition/quantity-stepper";
+import { QuickActions } from "@/components/nutrition/quick-actions";
+import { Card } from "@/components/ui/card";
+import { CheckCircle } from "@/components/ui/check-circle";
+import { PrimaryButton } from "@/components/ui/primary-button";
+import { SegmentedControl } from "@/components/ui/segmented-control";
+import { CATEGORIES } from "@/constants/categories";
+import { MEALS, MEAL_WITH_ARTICLE } from "@/constants/meals";
+import { getEntriesByDate } from "@/db/queries/entries";
+import { defaultPortion, getCatalog, type CatalogProduct } from "@/db/queries/products";
+import { useRefreshOnFocus } from "@/hooks/use-refresh-on-focus";
+import { useSingleNavigation } from "@/hooks/use-single-navigation";
 import { useThemeColors } from "@/hooks/use-theme-colors";
-import { getFavorites } from "@/db/queries/favorites";
-import { addEntry } from "@/db/queries/entries";
-import { updateLastQuantity } from "@/db/queries/products";
-import { calculateForQuantity, getMealForTime } from "@/lib/nutrition-utils";
-import { productRowToNutrition, formatDateISO } from "@/lib/product-utils";
-import { QuantityInput } from "@/components/nutrition/quantity-input";
-import { CATEGORY_LABELS } from "@/constants/categories";
+import { useToday } from "@/hooks/use-today";
+import { formatDayTitle } from "@/lib/dates";
+import { logFoods } from "@/lib/log-foods";
+import { guessMeal } from "@/lib/meal-rule";
+import { formatNumber } from "@/lib/nutrition-utils";
+import { matchesQuery } from "@/lib/search";
 import { useCheckedProductsStore } from "@/stores/checked-products-store";
-import type { FavoriteWithProduct } from "@/db/queries/favorites";
-import type { ProductCategory } from "@/types/database";
+import { useSettingsStore } from "@/stores/settings-store";
+import type { MealType } from "@/types/nutrition";
 
-type Step = ProductCategory | "recap";
-
-const STEP_ORDER: Step[] = ["meat", "side", "seasoning", "dessert", "recap"];
-
-function nextStep(current: Step): Step {
-  const idx = STEP_ORDER.indexOf(current);
-  return STEP_ORDER[Math.min(idx + 1, STEP_ORDER.length - 1)];
-}
-
-function prevStep(current: Step): Step | null {
-  const idx = STEP_ORDER.indexOf(current);
-  return idx <= 0 ? null : STEP_ORDER[idx - 1];
-}
-
-interface ActionButtonProps {
-  icon: string;
-  label: string;
-  onPress: () => void;
-  colors: ReturnType<typeof useThemeColors>;
-}
-
-function ActionButton({ icon, label, onPress, colors }: ActionButtonProps) {
-  return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => ({
-        flex: 1,
-        alignItems: "center",
-        justifyContent: "center",
-        backgroundColor: colors.card,
-        borderRadius: 14,
-        borderCurve: "continuous",
-        paddingVertical: 16,
-        gap: 8,
-        opacity: pressed ? 0.7 : 1,
-      })}
-    >
-      <SymbolView
-        name={icon as never}
-        size={24}
-        tintColor={colors.accent.calories}
-      />
-      <Text
-        style={{
-          fontSize: 13,
-          fontWeight: "600",
-          color: colors.textPrimary,
-          textAlign: "center",
-        }}
-      >
-        {label}
-      </Text>
-    </Pressable>
-  );
-}
+const MEAL_VALUES: MealType[] = ["breakfast", "lunch", "snack", "dinner"];
 
 export default function AddEntryScreen() {
   const router = useRouter();
+  const navigation = useNavigation();
   const db = useDb();
   const colors = useThemeColors();
+  const insets = useSafeAreaInsets();
+  const enabledMeals = useSettingsStore((s) => s.enabledMeals);
+  const today = useToday();
 
-  const [step, setStep] = useState<Step>("meat");
-  const [favorites, setFavorites] = useState<FavoriteWithProduct[]>([]);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [quantities, setQuantities] = useState<Record<string, number>>({});
-  const [baseQuantities, setBaseQuantities] = useState<Record<string, number>>(
-    {},
-  );
+  const params = useLocalSearchParams<{ date?: string; meal?: string }>();
+  const date = params.date ?? today;
+  const forcedMeal = MEAL_VALUES.find((m) => m === params.meal);
+
+  const [catalog, setCatalog] = useState<CatalogProduct[]>([]);
+  // Selected products and their grams, in the order they were picked.
+  const [selection, setSelection] = useState<Record<string, number>>({});
+  const [meal, setMeal] = useState<MealType>(forcedMeal ?? "lunch");
+  const mealTouched = useRef(!!forcedMeal);
+  const [query, setQuery] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
+  const navigate = useSingleNavigation();
 
-  const isSearchActive = searchQuery.trim().length > 0;
-
-  const searchResults = useMemo(() => {
-    if (!isSearchActive) return [];
-    const q = searchQuery.toLowerCase().trim();
-    return favorites.filter(
-      (f) =>
-        f.name.toLowerCase().includes(q) ||
-        (f.brand && f.brand.toLowerCase().includes(q)),
-    );
-  }, [favorites, searchQuery, isSearchActive]);
-
-  const loadFavorites = useCallback(async () => {
-    const data = await getFavorites(db);
-    setFavorites(data);
-    setQuantities((prev) => {
-      const next: Record<string, number> = { ...prev };
-      for (const fav of data) {
-        if (!(fav.id in next)) {
-          next[fav.id] = (fav.favorite_quantity ?? fav.last_quantity) || 100;
-        }
-      }
-      return next;
-    });
-    setBaseQuantities((prev) => {
-      const next: Record<string, number> = { ...prev };
-      for (const fav of data) {
-        if (!(fav.id in next)) {
-          next[fav.id] = (fav.favorite_quantity ?? fav.last_quantity) || 100;
-        }
-      }
-      return next;
-    });
-  }, [db]);
-
-  useFocusEffect(
+  useRefreshOnFocus(
     useCallback(() => {
-      loadFavorites().then(() => {
-        const checkedIds = useCheckedProductsStore.getState().ids;
-        if (checkedIds.length > 0) {
-          setSelectedIds((prev) => {
-            const next = new Set(prev);
-            for (const id of checkedIds) next.add(id);
+      let active = true;
+      (async () => {
+        const [products, dayEntries] = await Promise.all([
+          getCatalog(db),
+          getEntriesByDate(db, date),
+        ]);
+        if (!active) return;
+        setCatalog(products);
+        if (!mealTouched.current) {
+          setMeal(guessMeal(dayEntries, { isToday: date === today }));
+        }
+        // Products scanned, found online or created on a screen above this one.
+        const picked = useCheckedProductsStore.getState().take();
+        if (picked.length > 0) {
+          setSelection((prev) => {
+            const next = { ...prev };
+            for (const id of picked) {
+              const p = products.find((x) => x.id === id);
+              if (p && !(id in next)) next[id] = defaultPortion(p);
+            }
             return next;
           });
-          useCheckedProductsStore.getState().clear();
+          setQuery("");
         }
-      });
-    }, [loadFavorites]),
+      })();
+      return () => {
+        active = false;
+      };
+    }, [db, date, today]),
   );
 
-  const toggleSelection = useCallback((id: string) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+  const byId = useMemo(() => new Map(catalog.map((p) => [p.id, p])), [catalog]);
+
+  const toggle = useCallback(
+    (product: CatalogProduct) => {
+      Haptics.selectionAsync();
+      setSelection((prev) => {
+        const next = { ...prev };
+        if (product.id in next) delete next[product.id];
+        else next[product.id] = defaultPortion(product);
+        return next;
+      });
+    },
+    [],
+  );
+
+  const setQuantity = useCallback((id: string, grams: number) => {
+    setSelection((prev) => (id in prev ? { ...prev, [id]: grams } : prev));
   }, []);
 
-  const selectedItems = useMemo(
-    () =>
-      favorites
-        .filter((f) => selectedIds.has(f.id))
-        .map((f) => ({ product: f, quantity: quantities[f.id] || 100 }))
-        .sort((a, b) => a.product.name.localeCompare(b.product.name)),
-    [favorites, selectedIds, quantities],
-  );
+  const selectedIds = Object.keys(selection);
+  const totalCalories = selectedIds.reduce((sum, id) => {
+    const p = byId.get(id);
+    return p ? sum + (p.calories * selection[id]) / 100 : sum;
+  }, 0);
 
-  const totalCalories = useMemo(
-    () =>
-      selectedItems.reduce((sum, item) => {
-        const n = calculateForQuantity(
-          productRowToNutrition(item.product),
-          item.quantity,
-        );
-        return sum + Math.round(n.calories);
-      }, 0),
-    [selectedItems],
-  );
+  const searching = query.trim().length > 0;
+  const searchResults = useMemo(() => {
+    if (!searching) return [];
+    // Favorites first, then the other known products.
+    return catalog
+      .filter((p) => matchesQuery(query, p.name, p.brand))
+      .sort((a, b) => b.is_favorite - a.is_favorite);
+  }, [catalog, query, searching]);
+
+  // Picked products that are not favorites have no category section: list them on top.
+  const pickedOthers = selectedIds
+    .map((id) => byId.get(id))
+    .filter((p): p is CatalogProduct => !!p && !p.is_favorite);
+  const favorites = catalog.filter((p) => p.is_favorite);
+
+  const mealOptions = MEALS.filter((m) => enabledMeals[m.type] || m.type === meal).map((m) => ({
+    value: m.type,
+    label: m.label,
+  }));
 
   const handleSubmit = useCallback(async () => {
-    if (submitting || selectedItems.length === 0) return;
+    if (submitting || selectedIds.length === 0) return;
     setSubmitting(true);
     try {
-      const meal = getMealForTime(new Date().getHours());
-      const date = formatDateISO();
-      await db.withTransactionAsync(async () => {
-        for (const item of selectedItems) {
-          const n = calculateForQuantity(
-            productRowToNutrition(item.product),
-            item.quantity,
-          );
-          await addEntry(db, {
-            product_id: item.product.id,
-            product_name: item.product.name,
-            meal,
-            quantity: item.quantity,
-            date,
-            calories: Math.round(n.calories),
-            proteins: Math.round(n.proteins * 10) / 10,
-            carbs: Math.round(n.carbs * 10) / 10,
-            fats: Math.round(n.fats * 10) / 10,
-            fiber: n.fiber !== null ? Math.round(n.fiber * 10) / 10 : null,
-            sugars: n.sugars !== null ? Math.round(n.sugars * 10) / 10 : null,
-            saturated_fat:
-              n.saturated_fat !== null
-                ? Math.round(n.saturated_fat * 10) / 10
-                : null,
-            salt: n.salt !== null ? Math.round(n.salt * 10) / 10 : null,
-          });
-          await updateLastQuantity(db, item.product.id, item.quantity);
-        }
-      });
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      router.dismissAll();
+      const foods = selectedIds
+        .map((id) => ({ product: byId.get(id), quantity: selection[id] }))
+        .filter((f): f is { product: CatalogProduct; quantity: number } => !!f.product);
+      await logFoods(db, foods, date, meal);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      if (navigation.canGoBack()) router.back();
+      else router.replace("/");
     } catch {
       setSubmitting(false);
+      Alert.alert("Ajout impossible", "Les aliments n'ont pas été enregistrés. Réessaie.");
     }
-  }, [db, router, selectedItems, submitting]);
+  }, [byId, date, db, meal, navigation, router, selectedIds, selection, submitting]);
 
-  // ── Recap step ──
-  if (step === "recap") {
-    return (
-      <View style={{ flex: 1, backgroundColor: colors.background }}>
-        {/* Back bar */}
-        <Pressable
-          onPress={() => setStep("dessert")}
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            paddingHorizontal: 12,
-            paddingVertical: 10,
-            gap: 4,
-          }}
-        >
-          <SymbolView
-            name="chevron.left"
-            size={18}
-            tintColor={colors.accent.calories}
-          />
-          <Text
-            style={{
-              fontSize: 16,
-              color: colors.accent.calories,
-              fontWeight: "500",
-            }}
-          >
-            Retour
-          </Text>
-        </Pressable>
+  const renderRows = (products: CatalogProduct[]) => (
+    <Card>
+      {products.map((p, i) => (
+        <ProductLine
+          key={p.id}
+          product={p}
+          first={i === 0}
+          grams={selection[p.id]}
+          onToggle={toggle}
+          onQuantity={setQuantity}
+        />
+      ))}
+    </Card>
+  );
 
-        <ScrollView
-          contentContainerStyle={{ padding: 16, gap: 10, paddingBottom: 160 }}
-        >
-          {selectedItems.map((item) => {
-            const n = calculateForQuantity(
-              productRowToNutrition(item.product),
-              item.quantity,
-            );
-            return (
-              <View
-                key={item.product.id}
-                style={{
-                  backgroundColor: colors.card,
-                  borderRadius: 12,
-                  borderCurve: "continuous",
-                  padding: 14,
-                  gap: 10,
-                }}
-              >
-                <View
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    gap: 12,
-                  }}
-                >
-                  {item.product.image_url ? (
-                    <Image
-                      source={{ uri: item.product.image_url }}
-                      style={
-                        {
-                          width: 40,
-                          height: 40,
-                          borderRadius: 8,
-                          borderCurve: "continuous",
-                        } as unknown as ImageStyle
-                      }
-                      contentFit="cover"
-                      transition={200}
-                    />
-                  ) : (
-                    <View
-                      style={{
-                        width: 40,
-                        height: 40,
-                        borderRadius: 8,
-                        borderCurve: "continuous",
-                        backgroundColor: colors.isDark
-                          ? "rgba(255,255,255,0.08)"
-                          : "rgba(0,0,0,0.05)",
-                        alignItems: "center",
-                        justifyContent: "center",
-                      }}
-                    >
-                      <Text style={{ fontSize: 18, color: colors.textMuted }}>
-                        ?
-                      </Text>
-                    </View>
-                  )}
-                  <Text
-                    style={{
-                      fontSize: 15,
-                      fontWeight: "600",
-                      color: colors.textPrimary,
-                      flex: 1,
-                    }}
-                    numberOfLines={1}
-                  >
-                    {item.product.name}
-                  </Text>
-                </View>
-                <View
-                  style={{
-                    flexDirection: "row",
-                    gap: 6,
-                  }}
-                >
-                  {([0.5, 1, 2, 3, 4] as const).map((m) => {
-                    const base = baseQuantities[item.product.id] || 100;
-                    const target = Math.round(base * m);
-                    const active = item.quantity === target;
-                    return (
-                      <Pressable
-                        key={m}
-                        onPress={() => {
-                          Haptics.impactAsync(
-                            Haptics.ImpactFeedbackStyle.Light,
-                          );
-                          setQuantities((prev) => ({
-                            ...prev,
-                            [item.product.id]: target,
-                          }));
-                        }}
-                        style={({ pressed }) => ({
-                          paddingHorizontal: 12,
-                          paddingVertical: 5,
-                          borderRadius: 8,
-                          borderCurve: "continuous",
-                          backgroundColor: active
-                            ? colors.accent.calories
-                            : colors.card,
-                          borderWidth: active ? 0 : 1,
-                          borderColor: colors.separator,
-                          opacity: pressed ? 0.7 : 1,
-                        })}
-                      >
-                        <Text
-                          style={{
-                            fontSize: 13,
-                            fontWeight: "600",
-                            color: active ? "#fff" : colors.textSecondary,
-                          }}
-                        >
-                          {m === 0.5 ? "\u00BD" : `x${m}`}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-                <View
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                  }}
-                >
-                  <QuantityInput
-                    value={item.quantity}
-                    onChange={(v) =>
-                      setQuantities((prev) => ({
-                        ...prev,
-                        [item.product.id]: v,
-                      }))
-                    }
-                  />
-                  <Text
-                    style={{
-                      fontSize: 15,
-                      fontWeight: "600",
-                      color: colors.accent.calories,
-                      fontVariant: ["tabular-nums"],
-                    }}
-                  >
-                    {Math.round(n.calories)} kcal
-                  </Text>
-                </View>
-              </View>
-            );
-          })}
-        </ScrollView>
-
-        <View
-          style={{
-            position: "absolute",
-            bottom: 0,
-            left: 0,
-            right: 0,
-            padding: 16,
-            paddingBottom: 32,
-            backgroundColor: colors.background,
-            gap: 8,
-          }}
-        >
-          <View
-            style={{
-              flexDirection: "row",
-              justifyContent: "space-between",
-              paddingHorizontal: 4,
-            }}
-          >
-            <Text
-              style={{
-                fontSize: 15,
-                fontWeight: "600",
-                color: colors.textSecondary,
-              }}
-            >
-              Total
-            </Text>
-            <Text
-              style={{
-                fontSize: 17,
-                fontWeight: "700",
-                color: colors.accent.calories,
-                fontVariant: ["tabular-nums"],
-              }}
-            >
-              {totalCalories} kcal
-            </Text>
-          </View>
-          <Pressable
-            onPress={handleSubmit}
-            disabled={submitting}
-            style={({ pressed }) => ({
-              backgroundColor: colors.accent.calories,
-              borderRadius: 12,
-              borderCurve: "continuous",
-              paddingVertical: 14,
-              alignItems: "center",
-              opacity: pressed || submitting ? 0.7 : 1,
-            })}
-          >
-            {submitting ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={{ fontSize: 16, fontWeight: "700", color: "#fff" }}>
-                Ajouter tout
-              </Text>
-            )}
-          </Pressable>
-        </View>
-      </View>
-    );
-  }
-
-  // ── Category step (default) ──
-  const filteredFavorites = favorites.filter((f) => f.category === step);
-  const selectedInStep = filteredFavorites.filter((f) =>
-    selectedIds.has(f.id),
-  ).length;
+  const dayLabel = date === today ? null : formatDayTitle(date, today);
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
-      {/* Back button */}
-      {prevStep(step) !== null && (
-        <View style={{ paddingHorizontal: 12, paddingTop: 10 }}>
-          <Pressable
-            onPress={() => setStep(prevStep(step)!)}
-            hitSlop={8}
-            style={{ flexDirection: "row", alignItems: "center", gap: 4 }}
-          >
-            <SymbolView
-              name="chevron.left"
-              size={18}
-              tintColor={colors.accent.calories}
-            />
-            <Text
-              style={{
-                fontSize: 16,
-                color: colors.accent.calories,
-                fontWeight: "500",
-              }}
-            >
-              Retour
-            </Text>
-          </Pressable>
-        </View>
-      )}
-
       <ScrollView
-        contentContainerStyle={{ padding: 16, gap: 10, paddingBottom: 100 }}
-        keyboardDismissMode="on-drag"
+        contentContainerStyle={{ padding: 16, paddingBottom: 140, gap: 12 }}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        automaticallyAdjustKeyboardInsets
       >
-        {/* Action buttons — only on first step, before search */}
-        {!isSearchActive && step === "meat" && (
-          <View style={{ flexDirection: "row", gap: 8 }}>
-            <ActionButton
-              icon="barcode.viewfinder"
-              label="Scanner"
-              onPress={() => router.push("/add-entry/scan")}
-              colors={colors}
-            />
-            <ActionButton
-              icon="magnifyingglass"
-              label="Rechercher"
-              onPress={() => router.push("/add-entry/search")}
-              colors={colors}
-            />
-            <ActionButton
-              icon="square.and.pencil"
-              label="Manuel"
-              onPress={() => router.push("/add-entry/manual")}
-              colors={colors}
-            />
-          </View>
+        {dayLabel && (
+          <Text style={{ fontSize: 13, color: colors.accent.warning, fontWeight: "600", textAlign: "center" }}>
+            Ajout pour {dayLabel.toLowerCase()}
+          </Text>
         )}
-
-        {/* Search bar — after action buttons */}
-        <TextInput
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          placeholder="Rechercher un favori..."
-          placeholderTextColor={colors.textMuted}
-          clearButtonMode="while-editing"
-          returnKeyType="search"
-          autoCorrect={false}
-          style={{
-            backgroundColor: colors.card,
-            color: colors.textPrimary,
-            fontSize: 16,
-            paddingHorizontal: 14,
-            paddingVertical: 10,
-            borderRadius: 12,
-            borderCurve: "continuous",
-            borderWidth: 1,
-            borderColor: colors.separator,
+        <SegmentedControl
+          options={mealOptions}
+          value={meal}
+          onChange={(m) => {
+            mealTouched.current = true;
+            setMeal(m);
           }}
         />
 
-        {isSearchActive ? (
-          <>
-            {searchResults.length === 0 ? (
-              <Text
-                style={{
-                  textAlign: "center",
-                  color: colors.textMuted,
-                  fontSize: 15,
-                  marginTop: 32,
-                }}
-              >
-                Aucun résultat
-              </Text>
-            ) : (
-              searchResults.map((fav) => {
-                const isSelected = selectedIds.has(fav.id);
-                const qty = quantities[fav.id] || 100;
-                const cal = Math.round((fav.calories * qty) / 100);
-                return (
-                  <Pressable
-                    key={fav.id}
-                    onPress={() => toggleSelection(fav.id)}
-                    style={({ pressed }) => ({
-                      flexDirection: "row",
-                      alignItems: "center",
-                      backgroundColor: colors.card,
-                      borderRadius: 12,
-                      borderCurve: "continuous",
-                      padding: 12,
-                      gap: 12,
-                      borderWidth: isSelected ? 1.5 : 0,
-                      borderColor: isSelected
-                        ? colors.accent.calories
-                        : "transparent",
-                      opacity: pressed ? 0.7 : 1,
-                    })}
-                  >
-                    {/* Checkbox */}
-                    <View
-                      style={{
-                        width: 24,
-                        height: 24,
-                        borderRadius: 6,
-                        borderWidth: 2,
-                        borderColor: isSelected
-                          ? colors.accent.calories
-                          : colors.separator,
-                        backgroundColor: isSelected
-                          ? colors.accent.calories
-                          : "transparent",
-                        alignItems: "center",
-                        justifyContent: "center",
-                      }}
-                    >
-                      {isSelected && (
-                        <SymbolView
-                          name="checkmark"
-                          size={14}
-                          tintColor="#fff"
-                        />
-                      )}
-                    </View>
-                    {/* Image */}
-                    {fav.image_url ? (
-                      <Image
-                        source={{ uri: fav.image_url }}
-                        style={
-                          {
-                            width: 40,
-                            height: 40,
-                            borderRadius: 8,
-                            borderCurve: "continuous",
-                          } as unknown as ImageStyle
-                        }
-                        contentFit="cover"
-                        transition={200}
-                      />
-                    ) : (
-                      <View
-                        style={{
-                          width: 40,
-                          height: 40,
-                          borderRadius: 8,
-                          borderCurve: "continuous",
-                          backgroundColor: colors.isDark
-                            ? "rgba(255,255,255,0.08)"
-                            : "rgba(0,0,0,0.05)",
-                          alignItems: "center",
-                          justifyContent: "center",
-                        }}
-                      >
-                        <Text style={{ fontSize: 18, color: colors.textMuted }}>
-                          ?
-                        </Text>
-                      </View>
-                    )}
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 8,
+            backgroundColor: colors.card,
+            borderRadius: 10,
+            borderCurve: "continuous",
+            paddingHorizontal: 10,
+          }}
+        >
+          <SymbolView name="magnifyingglass" size={16} tintColor={colors.textSecondary} />
+          <TextInput
+            value={query}
+            onChangeText={setQuery}
+            placeholder="Chercher un produit"
+            placeholderTextColor={colors.textSecondary}
+            clearButtonMode="while-editing"
+            autoCorrect={false}
+            returnKeyType="search"
+            style={{ flex: 1, paddingVertical: 10, fontSize: 17, color: colors.textPrimary }}
+          />
+        </View>
 
-                    {/* Info */}
-                    <View style={{ flex: 1 }}>
-                      <Text
-                        style={{
-                          fontSize: 15,
-                          fontWeight: "500",
-                          color: colors.textPrimary,
-                        }}
-                        numberOfLines={1}
-                      >
-                        {fav.name}
-                      </Text>
-                      <Text
-                        style={{
-                          fontSize: 12,
-                          color: colors.textMuted,
-                          marginTop: 2,
-                          fontVariant: ["tabular-nums"],
-                        }}
-                      >
-                        {cal} kcal · {qty}g
-                      </Text>
-                    </View>
-                  </Pressable>
-                );
-              })
-            )}
-          </>
+        {!searching && <QuickActions query="mode=pick" />}
+
+        {searching ? (
+          searchResults.length > 0 ? (
+            renderRows(searchResults)
+          ) : (
+            <View style={{ alignItems: "center", gap: 10, marginTop: 16 }}>
+              <Text style={{ fontSize: 15, color: colors.textSecondary }}>
+                Aucun produit ne correspond à « {query.trim()} »
+              </Text>
+              <PrimaryButton
+                variant="tinted"
+                label="Chercher en ligne"
+                onPress={() =>
+                  navigate(() =>
+                    router.push(`/add-entry/search?mode=pick&q=${encodeURIComponent(query.trim())}`),
+                  )
+                }
+              />
+            </View>
+          )
         ) : (
           <>
-            {/* Category label */}
-            <Text
-              style={{
-                fontSize: 17,
-                fontWeight: "600",
-                color: colors.textPrimary,
-                textAlign: "center",
-                marginTop: 8,
-                marginBottom: 4,
-              }}
-            >
-              {CATEGORY_LABELS[step as ProductCategory]}
-            </Text>
-
-            {filteredFavorites.map((fav) => {
-              const isSelected = selectedIds.has(fav.id);
-              const qty = quantities[fav.id] || 100;
-              const cal = Math.round((fav.calories * qty) / 100);
+            {pickedOthers.length > 0 && (
+              <View style={{ gap: 6 }}>
+                <SectionLabel>Sélection</SectionLabel>
+                {renderRows(pickedOthers)}
+              </View>
+            )}
+            {CATEGORIES.map((cat) => {
+              const items = favorites.filter((p) => p.category === cat.type);
+              if (items.length === 0) return null;
               return (
-                <Pressable
-                  key={fav.id}
-                  onPress={() => toggleSelection(fav.id)}
-                  style={({ pressed }) => ({
-                    flexDirection: "row",
-                    alignItems: "center",
-                    backgroundColor: colors.card,
-                    borderRadius: 12,
-                    borderCurve: "continuous",
-                    padding: 12,
-                    gap: 12,
-                    borderWidth: isSelected ? 1.5 : 0,
-                    borderColor: isSelected
-                      ? colors.accent.calories
-                      : "transparent",
-                    opacity: pressed ? 0.7 : 1,
-                  })}
-                >
-                  {/* Checkbox */}
-                  <View
-                    style={{
-                      width: 24,
-                      height: 24,
-                      borderRadius: 6,
-                      borderWidth: 2,
-                      borderColor: isSelected
-                        ? colors.accent.calories
-                        : colors.separator,
-                      backgroundColor: isSelected
-                        ? colors.accent.calories
-                        : "transparent",
-                      alignItems: "center",
-                      justifyContent: "center",
-                    }}
-                  >
-                    {isSelected && (
-                      <SymbolView name="checkmark" size={14} tintColor="#fff" />
-                    )}
-                  </View>
-
-                  {/* Image */}
-                  {fav.image_url ? (
-                    <Image
-                      source={{ uri: fav.image_url }}
-                      style={
-                        {
-                          width: 40,
-                          height: 40,
-                          borderRadius: 8,
-                          borderCurve: "continuous",
-                        } as unknown as ImageStyle
-                      }
-                      contentFit="cover"
-                      transition={200}
-                    />
-                  ) : (
-                    <View
-                      style={{
-                        width: 40,
-                        height: 40,
-                        borderRadius: 8,
-                        borderCurve: "continuous",
-                        backgroundColor: colors.isDark
-                          ? "rgba(255,255,255,0.08)"
-                          : "rgba(0,0,0,0.05)",
-                        alignItems: "center",
-                        justifyContent: "center",
-                      }}
-                    >
-                      <Text style={{ fontSize: 18, color: colors.textMuted }}>
-                        ?
-                      </Text>
-                    </View>
-                  )}
-
-                  {/* Info */}
-                  <View style={{ flex: 1 }}>
-                    <Text
-                      style={{
-                        fontSize: 15,
-                        fontWeight: "500",
-                        color: colors.textPrimary,
-                      }}
-                      numberOfLines={1}
-                    >
-                      {fav.name}
-                    </Text>
-                    <Text
-                      style={{
-                        fontSize: 12,
-                        color: colors.textMuted,
-                        marginTop: 2,
-                        fontVariant: ["tabular-nums"],
-                      }}
-                    >
-                      {cal} kcal · {qty}g
-                    </Text>
-                  </View>
-                </Pressable>
+                <View key={cat.type} style={{ gap: 6 }}>
+                  <SectionLabel>{cat.label}</SectionLabel>
+                  {renderRows(items)}
+                </View>
               );
             })}
-
-            {filteredFavorites.length === 0 && (
-              <Text
-                style={{
-                  textAlign: "center",
-                  color: colors.textMuted,
-                  fontSize: 15,
-                  marginTop: 32,
-                }}
-              >
-                Aucun favori dans cette catégorie
+            {catalog.length > 0 && favorites.length === 0 && pickedOthers.length === 0 && (
+              <Text style={{ fontSize: 15, color: colors.textSecondary, textAlign: "center", marginTop: 16, lineHeight: 21 }}>
+                Pas encore de favoris. Cherche un produit ci-dessus, ou mets-en en favori depuis sa fiche.
               </Text>
             )}
           </>
         )}
       </ScrollView>
 
-      {/* Bottom button — only when not searching */}
-      {!isSearchActive && (
-        <View
-          style={{
-            position: "absolute",
-            bottom: 0,
-            left: 0,
-            right: 0,
-            padding: 16,
-            paddingBottom: 32,
-            backgroundColor: colors.background,
-          }}
-        >
-          <Pressable
-            onPress={() => setStep(nextStep(step))}
-            style={({ pressed }) => ({
-              backgroundColor: colors.accent.calories,
-              borderRadius: 12,
-              borderCurve: "continuous",
-              paddingVertical: 14,
-              alignItems: "center",
-              opacity: pressed ? 0.7 : 1,
-            })}
-          >
-            <Text style={{ fontSize: 16, fontWeight: "700", color: "#fff" }}>
-              Suivant{selectedInStep > 0 ? ` (${selectedInStep})` : ""}
-            </Text>
-          </Pressable>
+      <View
+        style={{
+          position: "absolute",
+          left: 0,
+          right: 0,
+          bottom: 0,
+          paddingHorizontal: 16,
+          paddingTop: 10,
+          paddingBottom: insets.bottom + 8,
+          backgroundColor: colors.background,
+          borderTopWidth: 0.5,
+          borderTopColor: colors.separator,
+          gap: 8,
+        }}
+      >
+        <View style={{ flexDirection: "row", justifyContent: "space-between", paddingHorizontal: 4 }}>
+          <Text style={{ fontSize: 14, color: colors.textSecondary }}>
+            {selectedIds.length === 0
+              ? "Aucun aliment choisi"
+              : `${selectedIds.length} aliment${selectedIds.length > 1 ? "s" : ""}`}
+          </Text>
+          <Text style={{ fontSize: 14, fontWeight: "700", color: colors.textPrimary, fontVariant: ["tabular-nums"] }}>
+            {formatNumber(totalCalories)} kcal
+          </Text>
         </View>
-      )}
+        <PrimaryButton
+          label={`Ajouter ${MEAL_WITH_ARTICLE[meal]}`}
+          onPress={handleSubmit}
+          loading={submitting}
+          disabled={selectedIds.length === 0}
+        />
+      </View>
     </View>
+  );
+}
+
+function SectionLabel({ children }: { children: string }) {
+  const colors = useThemeColors();
+  return (
+    <Text style={{ fontSize: 13, color: colors.textSecondary, marginLeft: 16, textTransform: "uppercase" }}>
+      {children}
+    </Text>
+  );
+}
+
+interface ProductLineProps {
+  product: CatalogProduct;
+  first: boolean;
+  /** Grams when selected, undefined otherwise. */
+  grams: number | undefined;
+  onToggle: (product: CatalogProduct) => void;
+  onQuantity: (id: string, grams: number) => void;
+}
+
+function ProductLine({ product, first, grams, onToggle, onQuantity }: ProductLineProps) {
+  const colors = useThemeColors();
+  const selected = grams !== undefined;
+  const portion = defaultPortion(product);
+  const shownGrams = grams ?? portion;
+  const tint = colors.isDark ? "rgba(48,209,88,0.09)" : "rgba(52,199,89,0.08)";
+
+  return (
+    <Animated.View layout={LinearTransition.duration(180)} style={{ backgroundColor: selected ? tint : "transparent" }}>
+      {!first && (
+        <View style={{ position: "absolute", top: 0, left: 52, right: 0, height: 0.5, backgroundColor: colors.separator }} />
+      )}
+      <Pressable
+        onPress={() => onToggle(product)}
+        accessibilityRole="checkbox"
+        accessibilityState={{ checked: selected }}
+        style={({ pressed }) => ({
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 12,
+          paddingVertical: 11,
+          paddingHorizontal: 14,
+          opacity: pressed ? 0.6 : 1,
+        })}
+      >
+        <CheckCircle checked={selected} />
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text numberOfLines={1} style={{ fontSize: 16, color: colors.textPrimary }}>
+            {product.name}
+          </Text>
+          <Text numberOfLines={1} style={{ fontSize: 13, color: colors.textSecondary, marginTop: 1, fontVariant: ["tabular-nums"] }}>
+            {formatNumber(shownGrams)} g · {formatNumber((product.calories * shownGrams) / 100)} kcal
+            {product.brand ? ` · ${product.brand}` : ""}
+          </Text>
+        </View>
+        {product.source === "estimated" && (
+          <Text style={{ fontSize: 12, fontWeight: "600", color: colors.accent.warning }}>estimé</Text>
+        )}
+      </Pressable>
+      {selected && (
+        <Animated.View entering={FadeIn.duration(160)} exiting={FadeOut.duration(100)} style={{ paddingLeft: 50, paddingRight: 14, paddingBottom: 12 }}>
+          <QuantityStepper value={grams} portion={portion} onChange={(g) => onQuantity(product.id, g)} />
+        </Animated.View>
+      )}
+    </Animated.View>
   );
 }

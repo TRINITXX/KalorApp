@@ -27,9 +27,10 @@ export async function removeFavorite(
 export async function getFavorites(
   db: SQLiteDatabase,
 ): Promise<FavoriteWithProduct[]> {
-  return db.getAllAsync<FavoriteWithProduct>(
-    `SELECT p.*, f.sort_order, f.quantity AS favorite_quantity FROM favorites f INNER JOIN products p ON p.id = f.product_id ORDER BY p.name ASC`,
+  const rows = await db.getAllAsync<FavoriteWithProduct>(
+    `SELECT p.*, f.sort_order, f.quantity AS favorite_quantity FROM favorites f INNER JOIN products p ON p.id = f.product_id`,
   );
+  return rows.sort((a, b) => a.name.localeCompare(b.name, "fr", { sensitivity: "base" }));
 }
 
 export async function isFavorite(

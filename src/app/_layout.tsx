@@ -1,7 +1,9 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { ActivityIndicator, AppState, View } from "react-native";
 import { Stack } from "expo-router/stack";
+import { StatusBar } from "expo-status-bar";
 import type { SQLiteDatabase } from "expo-sqlite";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 import { openSharedDatabase } from "@/db/client";
 import { useSettingsStore } from "@/stores/settings-store";
@@ -17,6 +19,7 @@ export function useDb(): SQLiteDatabase {
 
 export default function RootLayout() {
   const theme = useSettingsStore((s) => s.theme);
+  const background = theme === "dark" ? "#000000" : "#f2f2f7";
   const [db, setDb] = useState<SQLiteDatabase | null>(null);
 
   useEffect(() => {
@@ -58,7 +61,7 @@ export default function RootLayout() {
           flex: 1,
           justifyContent: "center",
           alignItems: "center",
-          backgroundColor: theme === "dark" ? "#000" : "#fff",
+          backgroundColor: background,
         }}
       >
         <ActivityIndicator />
@@ -67,35 +70,40 @@ export default function RootLayout() {
   }
 
   return (
-    <DbContext.Provider value={db}>
-      <Stack
-        screenOptions={{
-          headerShown: false,
-          contentStyle: {
-            backgroundColor: theme === "dark" ? "#000" : "#fff",
-          },
-        }}
-      >
-        <Stack.Screen
-          name="(tabs)"
-          options={{ headerShown: false, title: "" }}
-        />
-        <Stack.Screen
-          name="add-entry"
-          options={{
-            presentation: "fullScreenModal",
+    <GestureHandlerRootView style={{ flex: 1, backgroundColor: background }}>
+      <DbContext.Provider value={db}>
+        <StatusBar style={theme === "dark" ? "light" : "dark"} />
+        <Stack
+          screenOptions={{
             headerShown: false,
+            contentStyle: { backgroundColor: background },
           }}
-        />
-        <Stack.Screen
-          name="product/[id]"
-          options={{ headerShown: true, title: "Détail produit" }}
-        />
-        <Stack.Screen
-          name="quick-add"
-          options={{ presentation: "formSheet", sheetGrabberVisible: true }}
-        />
-      </Stack>
-    </DbContext.Provider>
+        >
+          <Stack.Screen
+            name="(tabs)"
+            options={{ headerShown: false, title: "" }}
+          />
+          <Stack.Screen
+            name="add-entry"
+            options={{
+              presentation: "fullScreenModal",
+              headerShown: false,
+            }}
+          />
+          <Stack.Screen
+            name="product/[id]"
+            options={{
+              headerShown: true,
+              title: "Produit",
+              headerBackTitle: "Retour",
+              headerStyle: { backgroundColor: background },
+              headerTintColor: theme === "dark" ? "#30d158" : "#248a3d",
+              headerTitleStyle: { color: theme === "dark" ? "#ffffff" : "#000000" },
+              headerShadowVisible: false,
+            }}
+          />
+        </Stack>
+      </DbContext.Provider>
+    </GestureHandlerRootView>
   );
 }

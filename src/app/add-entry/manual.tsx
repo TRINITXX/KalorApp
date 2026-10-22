@@ -1,14 +1,12 @@
 import { useCallback, useState } from "react";
 import {
-  ActivityIndicator,
   Alert,
   ScrollView,
   Text,
   TextInput,
   View,
-  Pressable,
 } from "react-native";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -16,12 +14,16 @@ import { v4 as uuidv4 } from "uuid";
 
 import { useDb } from "@/app/_layout";
 import { useThemeColors } from "@/hooks/use-theme-colors";
+import { addFavorite } from "@/db/queries/favorites";
 import { upsertProduct } from "@/db/queries/products";
 import {
   NumericField,
   parseNumericInput,
 } from "@/components/nutrition/numeric-field";
 import { CategorySelector } from "@/components/nutrition/category-selector";
+import { CloseButton } from "@/components/ui/close-button";
+import { PrimaryButton } from "@/components/ui/primary-button";
+import { useCheckedProductsStore } from "@/stores/checked-products-store";
 import type { ProductCategory, ProductRow } from "@/types/database";
 
 const schema = z.object({
@@ -39,7 +41,10 @@ const schema = z.object({
 type ManualFormValues = z.infer<typeof schema>;
 
 export default function ManualScreen() {
-  const { ean } = useLocalSearchParams<{ ean?: string }>();
+  const { ean, mode } = useLocalSearchParams<{ ean?: string; mode?: string }>();
+  // mode=pick: opened from the add screen (directly, or after an unknown
+  // barcode), the new product goes back selected there.
+  const picking = mode === "pick";
   const router = useRouter();
   const db = useDb();
   const colors = useThemeColors();
@@ -90,7 +95,17 @@ export default function ManualScreen() {
         };
 
         await upsertProduct(db, product);
-        router.push(`/add-entry/confirm?productId=${productId}`);
+        // A product typed by hand is one of yours: keep it in favorites.
+        await addFavorite(db, productId);
+        if (picking) {
+          useCheckedProductsStore.getState().pick([productId]);
+          // After an unknown barcode, the scanner sits between here and the add screen.
+          if (ean) router.dismiss(2);
+          else router.back();
+        } else {
+          if (ean) router.dismissAll();
+          router.back();
+        }
       } catch {
         Alert.alert(
           "Erreur",
@@ -100,7 +115,7 @@ export default function ManualScreen() {
         setSubmitting(false);
       }
     },
-    [category, db, ean, router],
+    [category, db, ean, picking, router],
   );
 
   return (
@@ -110,6 +125,7 @@ export default function ManualScreen() {
       keyboardShouldPersistTaps="handled"
       automaticallyAdjustKeyboardInsets
     >
+      <Stack.Screen options={{ headerLeft: picking || ean ? undefined : () => <CloseButton /> }} />
       {/* Name field */}
       <View style={{ gap: 4 }}>
         <Text style={{ fontSize: 13, color: colors.textSecondary }}>
@@ -161,7 +177,7 @@ export default function ManualScreen() {
           marginTop: 4,
         }}
       >
-        Valeurs nutritionnelles (pour 100g)
+        Valeurs pour 100 g
       </Text>
 
       {/* Required nutrition fields */}
@@ -170,7 +186,8 @@ export default function ManualScreen() {
         name="calories"
         render={({ field: { onChange, onBlur, value } }) => (
           <NumericField
-            label="Calories (kcal)"
+            label="Calories"
+            unit="kcal"
             value={value === 0 ? "" : String(value)}
             onChangeText={(text) => {
               const num = parseNumericInput(text);
@@ -188,7 +205,8 @@ export default function ManualScreen() {
         name="proteins"
         render={({ field: { onChange, onBlur, value } }) => (
           <NumericField
-            label="Proteines (g)"
+            label="Protéines"
+            unit="g"
             value={value === 0 ? "" : String(value)}
             onChangeText={(text) => {
               const num = parseNumericInput(text);
@@ -206,7 +224,8 @@ export default function ManualScreen() {
         name="carbs"
         render={({ field: { onChange, onBlur, value } }) => (
           <NumericField
-            label="Glucides (g)"
+            label="Glucides"
+            unit="g"
             value={value === 0 ? "" : String(value)}
             onChangeText={(text) => {
               const num = parseNumericInput(text);
@@ -224,7 +243,8 @@ export default function ManualScreen() {
         name="fats"
         render={({ field: { onChange, onBlur, value } }) => (
           <NumericField
-            label="Lipides (g)"
+            label="Lipides"
+            unit="g"
             value={value === 0 ? "" : String(value)}
             onChangeText={(text) => {
               const num = parseNumericInput(text);
@@ -243,7 +263,8 @@ export default function ManualScreen() {
         name="fiber"
         render={({ field: { onChange, onBlur, value } }) => (
           <NumericField
-            label="Fibres (g)"
+            label="Fibres"
+            unit="g"
             value={value == null ? "" : String(value)}
             onChangeText={(text) => {
               const num = parseNumericInput(text);
@@ -262,7 +283,8 @@ export default function ManualScreen() {
         name="sugars"
         render={({ field: { onChange, onBlur, value } }) => (
           <NumericField
-            label="Sucres (g)"
+            label="Sucres"
+            unit="g"
             value={value == null ? "" : String(value)}
             onChangeText={(text) => {
               const num = parseNumericInput(text);
@@ -281,7 +303,8 @@ export default function ManualScreen() {
         name="saturated_fat"
         render={({ field: { onChange, onBlur, value } }) => (
           <NumericField
-            label="Graisses saturées (g)"
+            label="Graisses saturées"
+            unit="g"
             value={value == null ? "" : String(value)}
             onChangeText={(text) => {
               const num = parseNumericInput(text);
@@ -300,7 +323,8 @@ export default function ManualScreen() {
         name="salt"
         render={({ field: { onChange, onBlur, value } }) => (
           <NumericField
-            label="Sel (g)"
+            label="Sel"
+            unit="g"
             value={value == null ? "" : String(value)}
             onChangeText={(text) => {
               const num = parseNumericInput(text);
@@ -314,28 +338,12 @@ export default function ManualScreen() {
         )}
       />
 
-      {/* Submit */}
-      <Pressable
+      <PrimaryButton
+        label="Enregistrer le produit"
         onPress={handleSubmit(onSubmit)}
-        disabled={submitting}
-        style={({ pressed }) => ({
-          backgroundColor: colors.accent.calories,
-          paddingVertical: 14,
-          borderRadius: 12,
-          borderCurve: "continuous",
-          alignItems: "center",
-          flexDirection: "row",
-          justifyContent: "center",
-          gap: 8,
-          marginTop: 8,
-          opacity: submitting ? 0.6 : pressed ? 0.7 : 1,
-        })}
-      >
-        {submitting && <ActivityIndicator size="small" color="#fff" />}
-        <Text style={{ color: "#fff", fontSize: 16, fontWeight: "600" }}>
-          Valider
-        </Text>
-      </Pressable>
+        loading={submitting}
+        style={{ marginTop: 8 }}
+      />
     </ScrollView>
   );
 }

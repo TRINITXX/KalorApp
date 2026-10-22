@@ -8,7 +8,7 @@ import {
   Text,
   View,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { SymbolView } from "expo-symbols";
 import {
   CameraView,
@@ -18,14 +18,20 @@ import {
 
 import { useDb } from "@/app/_layout";
 import { useThemeColors } from "@/hooks/use-theme-colors";
+import { addFavorite } from "@/db/queries/favorites";
 import { getProduct, upsertProduct } from "@/db/queries/products";
 import { fetchProduct } from "@/lib/open-food-facts";
 import { flattenProductForDb } from "@/lib/product-utils";
+import { useCheckedProductsStore } from "@/stores/checked-products-store";
 
 export default function ScanScreen() {
   const router = useRouter();
   const db = useDb();
   const colors = useThemeColors();
+  // mode=pick: opened from the add screen, the product goes back selected there.
+  // Otherwise opened from Favorites: the product becomes a favorite.
+  const { mode } = useLocalSearchParams<{ mode?: string }>();
+  const picking = mode === "pick";
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
   const scanLock = useRef(false);
@@ -35,6 +41,25 @@ export default function ScanScreen() {
   const [loading, setLoading] = useState(false);
   const cameraRef = useRef<CameraView>(null);
 
+  const finish = useCallback(
+    async (productId: string) => {
+      if (picking) {
+        useCheckedProductsStore.getState().pick([productId]);
+        router.back();
+      } else {
+        await addFavorite(db, productId);
+        router.dismissAll();
+        router.push(`/product/${encodeURIComponent(productId)}`);
+      }
+    },
+    [db, picking, router],
+  );
+
+  const openManual = useCallback(
+    (ean: string) => router.push(`/add-entry/manual?ean=${ean}${picking ? "&mode=pick" : ""}`),
+    [picking, router],
+  );
+
   const lookupEan = useCallback(
     async (ean: string) => {
       setLoading(true);
@@ -43,7 +68,7 @@ export default function ScanScreen() {
 
         // Use cached product if already fetched from OpenFoodFacts
         if (localProduct && localProduct.source === "openfoodfacts") {
-          router.push(`/add-entry/confirm?productId=${ean}`);
+          await finish(ean);
           return;
         }
 
@@ -51,15 +76,15 @@ export default function ScanScreen() {
           const offProduct = await fetchProduct(ean);
           if (offProduct) {
             await upsertProduct(db, flattenProductForDb(offProduct));
-            router.push(`/add-entry/confirm?productId=${ean}`);
+            await finish(ean);
           } else if (localProduct) {
-            router.push(`/add-entry/confirm?productId=${ean}`);
+            await finish(ean);
           } else {
-            router.push(`/add-entry/manual?ean=${ean}`);
+            openManual(ean);
           }
         } catch {
           if (localProduct) {
-            router.push(`/add-entry/confirm?productId=${ean}`);
+            await finish(ean);
           } else {
             Alert.alert(
               "Erreur réseau",
@@ -74,7 +99,7 @@ export default function ScanScreen() {
                 },
                 {
                   text: "Saisie manuelle",
-                  onPress: () => router.push(`/add-entry/manual?ean=${ean}`),
+                  onPress: () => openManual(ean),
                 },
                 {
                   text: "Annuler",
@@ -92,7 +117,7 @@ export default function ScanScreen() {
         setLoading(false);
       }
     },
-    [db, router],
+    [db, finish, openManual],
   );
 
   const handleBarCodeScanned = useCallback(

@@ -45,7 +45,7 @@ export function parseProduct(
 
   return {
     id: raw.code,
-    name: raw.product.product_name ?? "Unknown",
+    name: raw.product.product_name?.trim() || raw.product.brands?.trim() || "Produit sans nom",
     brand: raw.product.brands ?? null,
     image_url: raw.product.image_front_url ?? null,
     source: "openfoodfacts",
@@ -122,7 +122,7 @@ export async function searchProducts(query: string): Promise<SearchResult[]> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return (data.products ?? []).map((p: any) => ({
     id: p.code,
-    name: p.product_name ?? "Unknown",
+    name: p.product_name?.trim() || p.brands?.trim() || "Produit sans nom",
     brand: p.brands ?? null,
     image_url: p.image_front_small_url ?? null,
     calories: p.nutriments?.["energy-kcal_100g"] ?? null,

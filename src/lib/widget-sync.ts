@@ -1,7 +1,7 @@
 import type { SQLiteDatabase } from "expo-sqlite";
 
 import { getDailySummary } from "@/db/queries/entries";
-import { formatDateISO } from "@/lib/product-utils";
+import { formatDateISO } from "@/lib/dates";
 import { useSettingsStore } from "@/stores/settings-store";
 import { setWidgetData, reloadWidgets } from "@/modules/widget-bridge";
 

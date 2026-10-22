@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import { zustandMMKVStorage } from "@/lib/storage/app-storage";
+import { SETTINGS_VERSION, migrateSettings } from "@/stores/settings-migrations";
 import type { Goals, MealType } from "@/types/nutrition";
 
 interface SettingsState {
@@ -30,7 +31,7 @@ export const useSettingsStore = create<SettingsState>()(
       enabledMeals: {
         breakfast: false,
         lunch: true,
-        snack: true,
+        snack: false,
         dinner: true,
       },
       goals: DEFAULT_GOALS,
@@ -50,6 +51,8 @@ export const useSettingsStore = create<SettingsState>()(
     {
       name: "kalor-settings",
       storage: createJSONStorage(() => zustandMMKVStorage),
+      version: SETTINGS_VERSION,
+      migrate: (persisted, version) => migrateSettings(persisted, version) as SettingsState,
     },
   ),
 );

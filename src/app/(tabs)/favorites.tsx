@@ -1,239 +1,140 @@
-import { useCallback, useState } from "react";
-import { Alert, Pressable, ScrollView, Text, View } from "react-native";
+import { useCallback, useMemo, useState } from "react";
+import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { useRouter } from "expo-router";
-import { useFocusEffect } from "expo-router";
-import { Image, type ImageStyle } from "expo-image";
 import { SymbolView } from "expo-symbols";
 
 import { useDb } from "@/app/_layout";
-import { useThemeColors } from "@/hooks/use-theme-colors";
-import { getFavorites, removeFavorite } from "@/db/queries/favorites";
+import { QuickActions } from "@/components/nutrition/quick-actions";
+import { Card } from "@/components/ui/card";
+import { ProductThumb } from "@/components/ui/product-thumb";
+import { CATEGORIES } from "@/constants/categories";
+import { getFavorites } from "@/db/queries/favorites";
 import type { FavoriteWithProduct } from "@/db/queries/favorites";
+import { useRefreshOnFocus } from "@/hooks/use-refresh-on-focus";
+import { useSingleNavigation } from "@/hooks/use-single-navigation";
+import { useThemeColors } from "@/hooks/use-theme-colors";
+import { formatNumber } from "@/lib/nutrition-utils";
+import { matchesQuery } from "@/lib/search";
 
 export default function FavoritesScreen() {
   const router = useRouter();
   const db = useDb();
   const colors = useThemeColors();
   const [favorites, setFavorites] = useState<FavoriteWithProduct[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [query, setQuery] = useState("");
+  const navigate = useSingleNavigation();
 
-  const loadFavorites = useCallback(async () => {
-    const data = await getFavorites(db);
-    setFavorites(data);
-  }, [db]);
-
-  useFocusEffect(
+  useRefreshOnFocus(
     useCallback(() => {
-      loadFavorites();
-    }, [loadFavorites]),
+      getFavorites(db).then((data) => {
+        setFavorites(data);
+        setLoaded(true);
+      });
+    }, [db]),
   );
 
-  const handleRemove = useCallback(
-    async (productId: string, productName: string) => {
-      Alert.alert(
-        "Retirer des favoris",
-        `Retirer "${productName}" des favoris ?`,
-        [
-          { text: "Annuler", style: "cancel" },
-          {
-            text: "Retirer",
-            style: "destructive",
-            onPress: async () => {
-              await removeFavorite(db, productId);
-              await loadFavorites();
-            },
-          },
-        ],
-      );
-    },
-    [db, loadFavorites],
+  const filtered = useMemo(
+    () => favorites.filter((f) => matchesQuery(query, f.name, f.brand)),
+    [favorites, query],
   );
 
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: colors.background }}
-      contentContainerStyle={{ padding: 16, gap: 8 }}
-      contentInsetAdjustmentBehavior="automatic"
+      contentContainerStyle={{ padding: 16, paddingBottom: 40, gap: 12 }}
+      keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="on-drag"
     >
-      {/* Action buttons 3x1 */}
-      <View style={{ flexDirection: "row", gap: 8, marginBottom: 8 }}>
-        <ActionButton
-          icon="barcode.viewfinder"
-          label="Scanner"
-          onPress={() => router.push("/add-entry/scan")}
-          colors={colors}
-        />
-        <ActionButton
-          icon="magnifyingglass"
-          label="Rechercher"
-          onPress={() => router.push("/add-entry/search")}
-          colors={colors}
-        />
-        <ActionButton
-          icon="square.and.pencil"
-          label="Manuel"
-          onPress={() => router.push("/add-entry/manual")}
-          colors={colors}
-        />
-      </View>
+      <QuickActions />
 
-      {favorites.length === 0 && (
-        <View style={{ alignItems: "center", marginTop: 32, gap: 12 }}>
+      {favorites.length > 0 && (
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 8,
+            backgroundColor: colors.card,
+            borderRadius: 10,
+            paddingHorizontal: 10,
+          }}
+        >
+          <SymbolView name="magnifyingglass" size={16} tintColor={colors.textSecondary} />
+          <TextInput
+            value={query}
+            onChangeText={setQuery}
+            placeholder={`Chercher parmi ${favorites.length} favoris`}
+            placeholderTextColor={colors.textSecondary}
+            clearButtonMode="while-editing"
+            autoCorrect={false}
+            style={{ flex: 1, paddingVertical: 10, fontSize: 17, color: colors.textPrimary }}
+          />
+        </View>
+      )}
+
+      {loaded && favorites.length === 0 && (
+        <View style={{ alignItems: "center", marginTop: 40, gap: 12, paddingHorizontal: 24 }}>
           <SymbolView name="heart" tintColor={colors.textMuted} size={40} />
-          <Text
-            style={{
-              fontSize: 16,
-              color: colors.textMuted,
-              textAlign: "center",
-              lineHeight: 24,
-            }}
-          >
-            Aucun favori pour l'instant.{"\n"}Scannez ou recherchez un produit
-            et appuyez sur le coeur pour l'ajouter.
+          <Text style={{ fontSize: 17, fontWeight: "600", color: colors.textPrimary }}>Aucun favori</Text>
+          <Text style={{ fontSize: 15, color: colors.textSecondary, textAlign: "center", lineHeight: 21 }}>
+            Scanne ou cherche un produit, puis touche le cœur pour le retrouver dans l'écran d'ajout.
           </Text>
         </View>
       )}
 
-      {favorites.map((fav) => (
-        <Pressable
-          key={fav.id}
-          onPress={() => router.push(`/product/${fav.id}`)}
-          style={({ pressed }) => ({
-            flexDirection: "row",
-            alignItems: "center",
-            backgroundColor: colors.card,
-            borderRadius: 12,
-            borderCurve: "continuous",
-            padding: 12,
-            gap: 12,
-            opacity: pressed ? 0.7 : 1,
-          })}
-        >
-          {fav.image_url ? (
-            <Image
-              source={{ uri: fav.image_url }}
-              style={
-                {
-                  width: 48,
-                  height: 48,
-                  borderRadius: 10,
-                  borderCurve: "continuous",
-                } as unknown as ImageStyle
-              }
-              contentFit="cover"
-              transition={200}
-            />
-          ) : (
-            <View
-              style={{
-                width: 48,
-                height: 48,
-                borderRadius: 10,
-                borderCurve: "continuous",
-                backgroundColor: colors.isDark
-                  ? "rgba(255,255,255,0.08)"
-                  : "rgba(0,0,0,0.05)",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <Text style={{ fontSize: 22, color: colors.textMuted }}>?</Text>
-            </View>
-          )}
-
-          <View style={{ flex: 1 }}>
-            <Text
-              style={{
-                fontSize: 15,
-                fontWeight: "600",
-                color: colors.textPrimary,
-              }}
-              numberOfLines={1}
-            >
-              {fav.name}
+      {CATEGORIES.map((cat) => {
+        const items = filtered.filter((f) => f.category === cat.type);
+        if (items.length === 0) return null;
+        return (
+          <View key={cat.type} style={{ gap: 6 }}>
+            <Text style={{ fontSize: 13, color: colors.textSecondary, marginLeft: 16, textTransform: "uppercase" }}>
+              {cat.label}
             </Text>
-            {fav.brand ? (
-              <Text
-                style={{
-                  fontSize: 13,
-                  color: colors.textSecondary,
-                  marginTop: 2,
-                }}
-                numberOfLines={1}
-              >
-                {fav.brand}
-              </Text>
-            ) : null}
-            <Text
-              style={{
-                fontSize: 12,
-                color: colors.textMuted,
-                marginTop: 2,
-                fontVariant: ["tabular-nums"],
-              }}
-            >
-              {Math.round(
-                (fav.calories * (fav.favorite_quantity ?? fav.last_quantity)) /
-                  100,
-              )}{" "}
-              kcal · {fav.favorite_quantity ?? fav.last_quantity}g
-            </Text>
+            <Card>
+              {items.map((fav, i) => {
+                const qty = fav.favorite_quantity ?? fav.last_quantity;
+                return (
+                  <Pressable
+                    key={fav.id}
+                    onPress={() => navigate(() => router.push(`/product/${encodeURIComponent(fav.id)}`))}
+                    style={({ pressed }) => ({
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 12,
+                      paddingVertical: 10,
+                      paddingHorizontal: 16,
+                      backgroundColor: pressed ? colors.fill : "transparent",
+                    })}
+                  >
+                    {i > 0 && (
+                      <View
+                        style={{ position: "absolute", top: 0, left: 68, right: 0, height: 0.5, backgroundColor: colors.separator }}
+                      />
+                    )}
+                    <ProductThumb uri={fav.image_url} size={40} />
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text numberOfLines={1} style={{ fontSize: 16, color: colors.textPrimary }}>
+                        {fav.name}
+                      </Text>
+                      <Text numberOfLines={1} style={{ fontSize: 13, color: colors.textSecondary, marginTop: 1 }}>
+                        {formatNumber(qty)} g · {formatNumber((fav.calories * qty) / 100)} kcal
+                        {fav.brand ? ` · ${fav.brand}` : ""}
+                      </Text>
+                    </View>
+                    <SymbolView name="chevron.right" size={13} tintColor={colors.textMuted} />
+                  </Pressable>
+                );
+              })}
+            </Card>
           </View>
-
-          <Pressable
-            onPress={() => handleRemove(fav.id, fav.name)}
-            hitSlop={8}
-            style={{ padding: 4 }}
-          >
-            <SymbolView
-              name="heart.fill"
-              size={22}
-              tintColor={colors.accent.error}
-            />
-          </Pressable>
-        </Pressable>
-      ))}
-    </ScrollView>
-  );
-}
-
-interface ActionButtonProps {
-  icon: string;
-  label: string;
-  onPress: () => void;
-  colors: ReturnType<typeof useThemeColors>;
-}
-
-function ActionButton({ icon, label, onPress, colors }: ActionButtonProps) {
-  return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => ({
-        flex: 1,
-        alignItems: "center",
-        justifyContent: "center",
-        backgroundColor: colors.card,
-        borderRadius: 14,
-        borderCurve: "continuous",
-        paddingVertical: 16,
-        gap: 8,
-        opacity: pressed ? 0.7 : 1,
+        );
       })}
-    >
-      <SymbolView
-        name={icon as never}
-        size={24}
-        tintColor={colors.accent.calories}
-      />
-      <Text
-        style={{
-          fontSize: 13,
-          fontWeight: "600",
-          color: colors.textPrimary,
-          textAlign: "center",
-        }}
-      >
-        {label}
-      </Text>
-    </Pressable>
+
+      {favorites.length > 0 && filtered.length === 0 && (
+        <Text style={{ textAlign: "center", color: colors.textSecondary, fontSize: 15, marginTop: 24 }}>
+          Aucun favori ne correspond à « {query.trim()} »
+        </Text>
+      )}
+    </ScrollView>
   );
 }

@@ -11,6 +11,7 @@ export function parseNumericInput(text: string): number | null {
 
 interface NumericFieldProps {
   label: string;
+  unit: string;
   value: string;
   onChangeText: (text: string) => void;
   onBlur: () => void;
@@ -21,6 +22,7 @@ interface NumericFieldProps {
 
 export function NumericField({
   label,
+  unit,
   value,
   onChangeText,
   onBlur,
@@ -31,8 +33,7 @@ export function NumericField({
   return (
     <View style={{ gap: 4 }}>
       <Text style={{ fontSize: 13, color: colors.textSecondary }}>
-        {label}
-        {optional ? " (optionnel)" : ""}
+        {label} ({unit}{optional ? ", facultatif" : ""})
       </Text>
       <TextInput
         defaultValue={value}
@@ -40,7 +41,7 @@ export function NumericField({
         onBlur={onBlur}
         keyboardType="decimal-pad"
         selectTextOnFocus
-        placeholder="0"
+        placeholder={optional ? "–" : "0"}
         placeholderTextColor={colors.textMuted}
         style={{
           backgroundColor: colors.card,

@@ -16,7 +16,7 @@ export interface Product {
   name: string;
   brand: string | null;
   image_url: string | null;
-  source: "openfoodfacts" | "manual";
+  source: "openfoodfacts" | "manual" | "estimated";
   nutrition_per_100g: NutritionValues;
   last_quantity: number;
   category?: ProductCategory;

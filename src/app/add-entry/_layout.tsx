@@ -2,6 +2,7 @@ import { Pressable, Text } from "react-native";
 import { useRouter } from "expo-router";
 import { Stack } from "expo-router/stack";
 
+import { CloseButton } from "@/components/ui/close-button";
 import { useThemeColors } from "@/hooks/use-theme-colors";
 
 export default function AddEntryLayout() {
@@ -11,8 +12,12 @@ export default function AddEntryLayout() {
   return (
     <Stack
       screenOptions={{
-        headerStyle: { backgroundColor: colors.backgroundSecondary },
-        headerTintColor: colors.textPrimary,
+        headerStyle: { backgroundColor: colors.background },
+        headerTintColor: colors.accent.caloriesText,
+        headerTitleStyle: { color: colors.textPrimary, fontWeight: "700" },
+        headerShadowVisible: false,
+        headerBackTitle: "Retour",
+        contentStyle: { backgroundColor: colors.background },
       }}
     >
       <Stack.Screen
@@ -20,46 +25,19 @@ export default function AddEntryLayout() {
         options={{
           title: "Ajouter",
           headerLeft: () => (
-            <Pressable onPress={() => router.dismissAll()} hitSlop={8}>
-              <Text
-                style={{
-                  fontSize: 16,
-                  color: colors.accent.calories,
-                  fontWeight: "500",
-                }}
-              >
-                Fermer
-              </Text>
+            <Pressable onPress={() => router.dismissAll()} hitSlop={10} accessibilityRole="button">
+              <Text style={{ fontSize: 17, color: colors.accent.caloriesText }}>Fermer</Text>
             </Pressable>
           ),
         }}
       />
+      <Stack.Screen name="scan" options={{ title: "Scanner", headerShown: false }} />
+      <Stack.Screen name="search" options={{ title: "Chercher en ligne" }} />
+      <Stack.Screen name="manual" options={{ title: "Nouveau produit" }} />
       <Stack.Screen
-        name="scan"
-        options={{ title: "Scanner", headerShown: false }}
+        name="confirm"
+        options={{ title: "Modifier", headerLeft: () => <CloseButton /> }}
       />
-      <Stack.Screen
-        name="search"
-        options={{
-          title: "Rechercher",
-          headerLeft: () => (
-            <Pressable onPress={() => router.back()} hitSlop={8}>
-              <Text
-                style={{
-                  fontSize: 16,
-                  color: colors.accent.calories,
-                  fontWeight: "500",
-                }}
-              >
-                Retour
-              </Text>
-            </Pressable>
-          ),
-        }}
-      />
-      <Stack.Screen name="manual" options={{ title: "Saisie manuelle" }} />
-      <Stack.Screen name="confirm" options={{ title: "Confirmer" }} />
-      <Stack.Screen name="quick-meal" options={{ title: "Repas rapide" }} />
     </Stack>
   );
 }

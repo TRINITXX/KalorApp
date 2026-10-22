@@ -80,12 +80,48 @@ export async function deleteEntry(
     .catch(console.warn);
 }
 
+/** Puts back a deleted entry as it was (same id, same creation time). */
+export async function restoreEntry(
+  db: SQLiteDatabase,
+  entry: EntryRow,
+): Promise<void> {
+  await db.runAsync(
+    `INSERT INTO entries (id, product_id, product_name, meal, quantity, date, calories, proteins, carbs, fats, fiber, sugars, saturated_fat, salt, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    entry.id,
+    entry.product_id,
+    entry.product_name,
+    entry.meal,
+    entry.quantity,
+    entry.date,
+    entry.calories,
+    entry.proteins,
+    entry.carbs,
+    entry.fats,
+    entry.fiber,
+    entry.sugars,
+    entry.saturated_fat,
+    entry.salt,
+    entry.created_at,
+  );
+  import("@/lib/widget-sync")
+    .then((m) => m.syncWidgetData(db))
+    .catch(console.warn);
+}
+
+export async function getEntry(
+  db: SQLiteDatabase,
+  id: number,
+): Promise<EntryRow | null> {
+  return db.getFirstAsync<EntryRow>("SELECT * FROM entries WHERE id = ?", id);
+}
+
 export async function getEntriesByDate(
   db: SQLiteDatabase,
   date: string,
 ): Promise<EntryRow[]> {
   return db.getAllAsync<EntryRow>(
-    "SELECT * FROM entries WHERE date = ? ORDER BY product_name ASC",
+    "SELECT * FROM entries WHERE date = ? ORDER BY created_at ASC, id ASC",
     date,
   );
 }
@@ -149,14 +185,26 @@ export async function getWeeklyTotals(
   );
 }
 
+export interface WeekSummaryRow {
+  week_start: string;
+  total_calories: number;
+  days_logged: number;
+}
+
+/**
+ * Calories per Monday-based week from `startDate` (a local "YYYY-MM-DD"),
+ * with the number of days that hold at least one entry.
+ */
 export async function getWeeklySummaries(
   db: SQLiteDatabase,
-  weeks: number,
-): Promise<{ week_start: string; total_calories: number }[]> {
-  return db.getAllAsync(
-    `SELECT date(date,'weekday 0','-6 days') as week_start, COALESCE(SUM(calories),0) as total_calories
-   FROM entries WHERE date >= date('now','-'||?||' days') GROUP BY week_start ORDER BY week_start DESC`,
-    weeks * 7,
+  startDate: string,
+): Promise<WeekSummaryRow[]> {
+  return db.getAllAsync<WeekSummaryRow>(
+    `SELECT date(date, '-' || ((CAST(strftime('%w', date) AS INTEGER) + 6) % 7) || ' days') AS week_start,
+       COALESCE(SUM(calories), 0) AS total_calories,
+       COUNT(DISTINCT date) AS days_logged
+     FROM entries WHERE date >= ? GROUP BY week_start ORDER BY week_start ASC`,
+    startDate,
   );
 }
 

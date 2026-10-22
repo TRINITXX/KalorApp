@@ -1,693 +1,243 @@
-import { useCallback, useState } from "react";
-import {
-  Alert,
-  Pressable,
-  ScrollView,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
-import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { Image, type ImageStyle } from "expo-image";
+import { useCallback, useEffect, useState } from "react";
+import { Alert, Pressable, ScrollView, Text, View } from "react-native";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { SymbolView } from "expo-symbols";
 import * as Haptics from "expo-haptics";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useDb } from "@/app/_layout";
-import { useThemeColors } from "@/hooks/use-theme-colors";
 import {
-  getProduct,
-  updateLastQuantity,
-  upsertProduct,
-} from "@/db/queries/products";
-import { addEntry, updateEntry } from "@/db/queries/entries";
+  NutritionTable,
+  nutrientTexts,
+  parseNutrientTexts,
+  type NutrientKey,
+  type NutrientTexts,
+} from "@/components/nutrition/nutrition-table";
+import { QuantityStepper } from "@/components/nutrition/quantity-stepper";
+import { Card } from "@/components/ui/card";
+import { PrimaryButton } from "@/components/ui/primary-button";
+import { ProductThumb } from "@/components/ui/product-thumb";
+import { SegmentedControl } from "@/components/ui/segmented-control";
+import { MEALS } from "@/constants/meals";
+import { deleteEntry, getEntry, updateEntry } from "@/db/queries/entries";
 import {
-  isFavorite,
   addFavorite,
-  removeFavorite,
   getFavoriteQuantity,
+  isFavorite,
+  removeFavorite,
 } from "@/db/queries/favorites";
-import { calculateForQuantity, getMealForTime } from "@/lib/nutrition-utils";
-import { productRowToNutrition, formatDateISO } from "@/lib/product-utils";
-import { QuantityInput } from "@/components/nutrition/quantity-input";
-import { MealSelector } from "@/components/nutrition/meal-selector";
-import { CategorySelector } from "@/components/nutrition/category-selector";
-import type { ProductCategory, ProductRow } from "@/types/database";
-import type { MealType } from "@/types/nutrition";
+import { getProduct, updateLastQuantity, upsertProduct } from "@/db/queries/products";
+import { useThemeColors, type ThemeColors } from "@/hooks/use-theme-colors";
+import { entryNutrition, entryPer100g, formatNumber } from "@/lib/nutrition-utils";
+import { productRowToNutrition } from "@/lib/product-utils";
+import { useSettingsStore } from "@/stores/settings-store";
+import type { EntryRow, ProductRow } from "@/types/database";
+import type { MealType, NutritionValues } from "@/types/nutrition";
 
-export default function ConfirmScreen() {
-  const { productId, entryId, entryQuantity } = useLocalSearchParams<{
-    productId: string;
-    entryId?: string;
-    entryQuantity?: string;
-  }>();
+/** Edits one food already in the journal: quantity, meal, values, or removal. */
+export default function EditEntryScreen() {
+  const { productId, entryId } = useLocalSearchParams<{ productId: string; entryId: string }>();
   const router = useRouter();
   const db = useDb();
   const colors = useThemeColors();
+  const insets = useSafeAreaInsets();
+  const enabledMeals = useSettingsStore((s) => s.enabledMeals);
 
+  const [entry, setEntry] = useState<EntryRow | null>(null);
   const [product, setProduct] = useState<ProductRow | null>(null);
   const [quantity, setQuantity] = useState(100);
+  const [portion, setPortion] = useState(100);
+  const [meal, setMeal] = useState<MealType>("lunch");
   const [favorite, setFavorite] = useState(false);
-  const [editing, setEditing] = useState(false);
-  const [editingName, setEditingName] = useState(false);
-  const [editedName, setEditedName] = useState("");
-  const [category, setCategory] = useState<ProductCategory>("side");
-  const [editValues, setEditValues] = useState({
-    calories: "",
-    proteins: "",
-    carbs: "",
-    fats: "",
-    fiber: "",
-    sugars: "",
-    saturated_fat: "",
-    salt: "",
-  });
-  const [selectedMeal, setSelectedMeal] = useState<MealType>(
-    getMealForTime(new Date().getHours()),
-  );
+  // Table shown per 100 g (to type corrections) or for the eaten quantity.
+  const [showPer100g, setShowPer100g] = useState(false);
+  // Corrections typed per 100 g; kept when switching back to the portion view.
+  const [values, setValues] = useState<NutrientTexts | null>(null);
+  const [valuesEdited, setValuesEdited] = useState(false);
+  const [saving, setSaving] = useState(false);
 
-  useFocusEffect(
-    useCallback(() => {
-      if (!productId) return;
-      const load = async () => {
-        const [p, fav, favQty] = await Promise.all([
-          getProduct(db, productId),
-          isFavorite(db, productId),
-          getFavoriteQuantity(db, productId),
-        ]);
-        if (p) {
-          setProduct(p);
-          setEditedName(p.name);
-          setCategory(p.category);
-          setQuantity(
-            entryQuantity
-              ? parseInt(entryQuantity, 10)
-              : (favQty ?? p.last_quantity),
-          );
-          setFavorite(fav);
-          setEditValues({
-            calories: String(p.calories),
-            proteins: String(p.proteins),
-            carbs: String(p.carbs),
-            fats: String(p.fats),
-            fiber: p.fiber != null ? String(p.fiber) : "",
-            sugars: p.sugars != null ? String(p.sugars) : "",
-            saturated_fat:
-              p.saturated_fat != null ? String(p.saturated_fat) : "",
-            salt: p.salt != null ? String(p.salt) : "",
-          });
-        }
-      };
-      load();
-    }, [db, productId]),
-  );
+  useEffect(() => {
+    (async () => {
+      const [e, p, fav, favQty] = await Promise.all([
+        getEntry(db, Number(entryId)),
+        getProduct(db, productId),
+        isFavorite(db, productId),
+        getFavoriteQuantity(db, productId),
+      ]);
+      if (!e || !p) return;
+      setEntry(e);
+      setProduct(p);
+      setQuantity(e.quantity);
+      setMeal(e.meal);
+      setFavorite(fav);
+      setPortion(favQty || p.last_quantity || 100);
+      setValues(nutrientTexts(productRowToNutrition(p)));
+    })();
+  }, [db, entryId, productId]);
 
-  const handleSaveName = useCallback(async () => {
-    if (!product) return;
-    const trimmed = editedName.trim();
-    if (trimmed && trimmed !== product.name) {
-      const updated = { ...product, name: trimmed };
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { created_at, ...rest } = updated;
-      await upsertProduct(db, rest);
-      setProduct(updated);
-    }
-    setEditingName(false);
-  }, [db, editedName, product]);
+  // Values per 100 g: the typed corrections, else the entry's own snapshot.
+  const per100g = useCallback((): NutritionValues | null => {
+    if (!entry) return null;
+    if (valuesEdited && values) return parseNutrientTexts(values);
+    return entryPer100g(entry);
+  }, [entry, values, valuesEdited]);
 
-  const handleToggleFavorite = useCallback(async () => {
-    if (!product) return;
-    if (favorite) {
-      await removeFavorite(db, product.id);
-      setFavorite(false);
-    } else {
-      await addFavorite(db, product.id);
-      setFavorite(true);
-    }
-  }, [db, favorite, product]);
-
-  const handleSaveEdit = useCallback(async () => {
-    if (!product) return;
-    const parse = (v: string) => {
-      const n = parseFloat(v.replace(",", "."));
-      return isNaN(n) ? 0 : n;
-    };
-    const parseOpt = (v: string) => {
-      if (v.trim() === "") return null;
-      const n = parseFloat(v.replace(",", "."));
-      return isNaN(n) ? null : n;
-    };
-
-    const updated: Omit<ProductRow, "created_at"> = {
-      ...product,
-      calories: parse(editValues.calories),
-      proteins: parse(editValues.proteins),
-      carbs: parse(editValues.carbs),
-      fats: parse(editValues.fats),
-      fiber: parseOpt(editValues.fiber),
-      sugars: parseOpt(editValues.sugars),
-      saturated_fat: parseOpt(editValues.saturated_fat),
-      salt: parseOpt(editValues.salt),
-    };
-    await upsertProduct(db, updated);
-    setProduct({ ...updated, created_at: product.created_at });
-    setEditing(false);
-  }, [db, editValues, product]);
-
-  const calculated = product
-    ? calculateForQuantity(productRowToNutrition(product), quantity)
-    : null;
-
-  const handleAdd = useCallback(async () => {
-    if (!product) return;
-
-    // Auto-save edits if still in editing mode
-    let currentProduct = product;
-    if (editing) {
-      const parse = (v: string) => {
-        const n = parseFloat(v.replace(",", "."));
-        return isNaN(n) ? 0 : n;
-      };
-      const parseOpt = (v: string) => {
-        if (v.trim() === "") return null;
-        const n = parseFloat(v.replace(",", "."));
-        return isNaN(n) ? null : n;
-      };
-      currentProduct = {
-        ...product,
-        calories: parse(editValues.calories),
-        proteins: parse(editValues.proteins),
-        carbs: parse(editValues.carbs),
-        fats: parse(editValues.fats),
-        fiber: parseOpt(editValues.fiber),
-        sugars: parseOpt(editValues.sugars),
-        saturated_fat: parseOpt(editValues.saturated_fat),
-        salt: parseOpt(editValues.salt),
-      };
-      await upsertProduct(db, currentProduct);
-      setProduct(currentProduct);
-      setEditing(false);
-    }
-
-    if (category !== currentProduct.category) {
-      currentProduct = { ...currentProduct, category };
-      const { created_at: _ca, ...rest } = currentProduct;
-      await upsertProduct(db, rest);
-      setProduct(currentProduct);
-    }
-
-    const calc = calculateForQuantity(
-      productRowToNutrition(currentProduct),
-      quantity,
-    );
-
+  const handleSave = useCallback(async () => {
+    const base = per100g();
+    if (!entry || !product || !base || saving) return;
+    setSaving(true);
     try {
-      const nutritionData = {
-        meal: selectedMeal,
-        quantity,
-        calories: calc.calories,
-        proteins: calc.proteins,
-        carbs: calc.carbs,
-        fats: calc.fats,
-        fiber: calc.fiber,
-        sugars: calc.sugars,
-        saturated_fat: calc.saturated_fat,
-        salt: calc.salt,
-      };
-
-      if (entryId) {
-        await updateEntry(db, parseInt(entryId, 10), nutritionData);
-      } else {
-        await addEntry(db, {
-          product_id: currentProduct.id,
-          product_name: currentProduct.name,
-          date: formatDateISO(),
-          ...nutritionData,
-        });
+      if (valuesEdited) {
+        const { created_at: _createdAt, ...row } = product;
+        await upsertProduct(db, { ...row, ...base });
       }
-      await updateLastQuantity(db, currentProduct.id, quantity);
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      await updateEntry(db, entry.id, { meal, quantity, ...entryNutrition(base, quantity) });
+      await updateLastQuantity(db, product.id, quantity);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.back();
     } catch {
-      Alert.alert(
-        "Erreur",
-        "Impossible d'ajouter l'entrée. Veuillez réessayer.",
-      );
+      setSaving(false);
+      Alert.alert("Enregistrement impossible", "La modification n'a pas été enregistrée. Réessaie.");
     }
-  }, [
-    category,
-    db,
-    editing,
-    editValues,
-    entryId,
-    product,
-    quantity,
-    router,
-    selectedMeal,
-  ]);
+  }, [db, entry, meal, per100g, product, quantity, router, saving, valuesEdited]);
 
-  if (!product) {
-    return (
-      <View
-        style={{
-          flex: 1,
-          backgroundColor: colors.background,
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        <Text style={{ color: colors.textMuted, fontSize: 15 }}>
-          Chargement...
-        </Text>
-      </View>
-    );
+  const handleDelete = useCallback(() => {
+    if (!entry) return;
+    Alert.alert("Supprimer cet aliment ?", `${entry.product_name} sera retiré du journal.`, [
+      { text: "Annuler", style: "cancel" },
+      {
+        text: "Supprimer",
+        style: "destructive",
+        onPress: async () => {
+          await deleteEntry(db, entry.id);
+          router.back();
+        },
+      },
+    ]);
+  }, [db, entry, router]);
+
+  const toggleFavorite = useCallback(async () => {
+    if (!product) return;
+    Haptics.selectionAsync();
+    if (favorite) await removeFavorite(db, product.id);
+    else await addFavorite(db, product.id);
+    setFavorite(!favorite);
+  }, [db, favorite, product]);
+
+  if (!product || !entry) {
+    return <View style={{ flex: 1, backgroundColor: colors.background }} />;
   }
 
+  const base = per100g();
+  const totals = base ? entryNutrition(base, quantity) : null;
+  const mealOptions = MEALS.filter((m) => enabledMeals[m.type] || m.type === meal).map((m) => ({
+    value: m.type,
+    label: m.label,
+  }));
+
   return (
-    <ScrollView
-      style={{ flex: 1, backgroundColor: colors.background }}
-      contentContainerStyle={{ padding: 16, gap: 16 }}
-      keyboardShouldPersistTaps="handled"
-    >
-      {/* Product info */}
-      <View
-        style={{
-          backgroundColor: colors.card,
-          borderRadius: 14,
-          borderCurve: "continuous",
-          padding: 16,
-          flexDirection: "row",
-          alignItems: "center",
-          gap: 14,
-        }}
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
+      <ScrollView
+        contentContainerStyle={{ padding: 16, paddingBottom: 120, gap: 16 }}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        automaticallyAdjustKeyboardInsets
       >
-        {product.image_url ? (
-          <Image
-            source={{ uri: product.image_url }}
-            style={
-              {
-                width: 64,
-                height: 64,
-                borderRadius: 10,
-                borderCurve: "continuous",
-              } as unknown as ImageStyle
-            }
-            contentFit="cover"
-            transition={200}
-          />
-        ) : (
-          <View
-            style={{
-              width: 64,
-              height: 64,
-              borderRadius: 10,
-              borderCurve: "continuous",
-              backgroundColor: colors.isDark
-                ? "rgba(255,255,255,0.08)"
-                : "rgba(0,0,0,0.05)",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <Text style={{ fontSize: 28, color: colors.textMuted }}>?</Text>
+        <Card style={{ padding: 14, flexDirection: "row", alignItems: "center", gap: 12 }}>
+          <ProductThumb uri={product.image_url} size={52} />
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text numberOfLines={2} style={{ fontSize: 17, fontWeight: "600", color: colors.textPrimary }}>
+              {product.name}
+            </Text>
+            {product.brand ? (
+              <Text numberOfLines={1} style={{ fontSize: 14, color: colors.textSecondary, marginTop: 2 }}>
+                {product.brand}
+              </Text>
+            ) : null}
           </View>
-        )}
-        <View style={{ flex: 1 }}>
-          {editingName ? (
-            <TextInput
-              value={editedName}
-              onChangeText={setEditedName}
-              onBlur={handleSaveName}
-              onSubmitEditing={handleSaveName}
-              autoFocus
-              returnKeyType="done"
-              style={{
-                fontSize: 17,
-                fontWeight: "600",
-                color: colors.textPrimary,
-                paddingVertical: 2,
-                paddingHorizontal: 6,
-                marginHorizontal: -6,
-                backgroundColor: colors.isDark
-                  ? "rgba(255,255,255,0.08)"
-                  : "rgba(0,0,0,0.04)",
-                borderRadius: 6,
+          <Pressable
+            onPress={toggleFavorite}
+            hitSlop={10}
+            accessibilityRole="button"
+            accessibilityLabel={favorite ? "Retirer des favoris" : "Ajouter aux favoris"}
+          >
+            <SymbolView
+              name={favorite ? "heart.fill" : "heart"}
+              size={24}
+              tintColor={favorite ? colors.accent.error : colors.textSecondary}
+            />
+          </Pressable>
+        </Card>
+
+        <View style={{ gap: 8 }}>
+          <Label colors={colors}>Quantité</Label>
+          <QuantityStepper value={quantity} portion={portion} onChange={setQuantity} />
+        </View>
+
+        <View style={{ gap: 8 }}>
+          <Label colors={colors}>Repas</Label>
+          <SegmentedControl options={mealOptions} value={meal} onChange={setMeal} />
+        </View>
+
+        <View style={{ gap: 8 }}>
+          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "baseline" }}>
+            <Label colors={colors}>
+              {showPer100g ? "Valeurs pour 100 g" : `Pour ${formatNumber(quantity)} g`}
+            </Label>
+            <Pressable onPress={() => setShowPer100g((v) => !v)} hitSlop={8}>
+              <Text style={{ fontSize: 15, color: colors.accent.caloriesText }}>
+                {showPer100g ? "Voir la portion" : "Corriger les valeurs"}
+              </Text>
+            </Pressable>
+          </View>
+          {showPer100g && values ? (
+            <NutritionTable
+              mode="edit"
+              texts={values}
+              onChange={(key: NutrientKey, text) => {
+                setValuesEdited(true);
+                setValues((prev) => (prev ? { ...prev, [key]: text } : prev));
               }}
             />
           ) : (
-            <Pressable
-              onPress={() => setEditingName(true)}
-              style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
-            >
-              <Text
-                style={{
-                  fontSize: 17,
-                  fontWeight: "600",
-                  color: colors.textPrimary,
-                  flex: 1,
-                }}
-                numberOfLines={2}
-              >
-                {product.name}
-              </Text>
-              <SymbolView
-                name="pencil"
-                size={14}
-                tintColor={colors.textMuted}
-              />
-            </Pressable>
+            totals && <NutritionTable mode="view" values={totals} />
           )}
-          {product.brand ? (
-            <Text
-              style={{
-                fontSize: 14,
-                color: colors.textSecondary,
-                marginTop: 2,
-              }}
-              numberOfLines={1}
-            >
-              {product.brand}
+          {(showPer100g || valuesEdited) && (
+            <Text style={{ fontSize: 13, color: colors.textSecondary, marginHorizontal: 4 }}>
+              La correction vaut pour ce produit partout. Les jours passés ne changent pas.
             </Text>
-          ) : null}
+          )}
         </View>
-        <Pressable
-          onPress={handleToggleFavorite}
-          hitSlop={8}
-          style={{ padding: 4 }}
-        >
-          <SymbolView
-            name={favorite ? "heart.fill" : "heart"}
-            size={24}
-            tintColor={favorite ? colors.accent.error : colors.textMuted}
-          />
+
+        <Pressable onPress={handleDelete} style={{ alignItems: "center", paddingVertical: 8 }}>
+          <Text style={{ fontSize: 17, color: colors.accent.error }}>Supprimer du journal</Text>
         </Pressable>
-      </View>
+      </ScrollView>
 
-      {/* Category */}
-      <CategorySelector value={category} onChange={setCategory} />
-
-      {/* Quantity — compact centered */}
-      <View style={{ alignItems: "center", gap: 6 }}>
-        <Text
-          style={{
-            fontSize: 15,
-            fontWeight: "600",
-            color: colors.textSecondary,
-          }}
-        >
-          Quantité
-        </Text>
-        <QuantityInput value={quantity} onChange={setQuantity} />
-      </View>
-
-      {/* Nutrition — all values with edit toggle */}
       <View
         style={{
-          backgroundColor: colors.card,
-          borderRadius: 14,
-          borderCurve: "continuous",
-          padding: 16,
+          position: "absolute",
+          left: 0,
+          right: 0,
+          bottom: 0,
+          paddingHorizontal: 16,
+          paddingTop: 10,
+          paddingBottom: insets.bottom + 8,
+          backgroundColor: colors.background,
+          borderTopWidth: 0.5,
+          borderTopColor: colors.separator,
         }}
       >
-        <View
-          style={{
-            flexDirection: "row",
-            justifyContent: "space-between",
-            alignItems: "center",
-            marginBottom: 12,
-          }}
-        >
-          <Text
-            style={{
-              fontSize: 15,
-              fontWeight: "600",
-              color: colors.textSecondary,
-            }}
-          >
-            Valeurs pour {quantity}g
-          </Text>
-          <Pressable
-            onPress={() => {
-              if (editing) {
-                handleSaveEdit();
-              } else {
-                setEditing(true);
-              }
-            }}
-            hitSlop={8}
-          >
-            <Text
-              style={{
-                fontSize: 14,
-                fontWeight: "600",
-                color: colors.accent.calories,
-              }}
-            >
-              {editing ? "Enregistrer" : "Modifier"}
-            </Text>
-          </Pressable>
-        </View>
-
-        {editing ? (
-          <View style={{ gap: 10 }}>
-            <EditRow
-              label="Calories"
-              unit="kcal"
-              value={editValues.calories}
-              onChange={(v) => setEditValues((p) => ({ ...p, calories: v }))}
-              colors={colors}
-            />
-            <EditRow
-              label="Lipides"
-              unit="g"
-              value={editValues.fats}
-              onChange={(v) => setEditValues((p) => ({ ...p, fats: v }))}
-              colors={colors}
-            />
-            <EditRow
-              label="Graisses sat."
-              unit="g"
-              value={editValues.saturated_fat}
-              onChange={(v) =>
-                setEditValues((p) => ({ ...p, saturated_fat: v }))
-              }
-              colors={colors}
-              optional
-            />
-            <EditRow
-              label="Glucides"
-              unit="g"
-              value={editValues.carbs}
-              onChange={(v) => setEditValues((p) => ({ ...p, carbs: v }))}
-              colors={colors}
-            />
-            <EditRow
-              label="Sucres"
-              unit="g"
-              value={editValues.sugars}
-              onChange={(v) => setEditValues((p) => ({ ...p, sugars: v }))}
-              colors={colors}
-              optional
-            />
-            <EditRow
-              label="Fibres"
-              unit="g"
-              value={editValues.fiber}
-              onChange={(v) => setEditValues((p) => ({ ...p, fiber: v }))}
-              colors={colors}
-              optional
-            />
-            <EditRow
-              label="Protéines"
-              unit="g"
-              value={editValues.proteins}
-              onChange={(v) => setEditValues((p) => ({ ...p, proteins: v }))}
-              colors={colors}
-            />
-            <EditRow
-              label="Sel"
-              unit="g"
-              value={editValues.salt}
-              onChange={(v) => setEditValues((p) => ({ ...p, salt: v }))}
-              colors={colors}
-              optional
-            />
-          </View>
-        ) : (
-          <View style={{ gap: 8 }}>
-            <NutritionRow
-              label="Calories"
-              value={`${Math.round(calculated?.calories ?? 0)} kcal`}
-              color={colors.accent.calories}
-            />
-            <NutritionRow
-              label="Lipides"
-              value={`${(calculated?.fats ?? 0).toFixed(1)} g`}
-              color={colors.accent.fats}
-            />
-            {calculated?.saturated_fat != null && (
-              <NutritionRow
-                label="Graisses sat."
-                value={`${calculated.saturated_fat.toFixed(1)} g`}
-                color={colors.textMuted}
-              />
-            )}
-            <NutritionRow
-              label="Glucides"
-              value={`${(calculated?.carbs ?? 0).toFixed(1)} g`}
-              color={colors.accent.carbs}
-            />
-            {calculated?.sugars != null && (
-              <NutritionRow
-                label="Sucres"
-                value={`${calculated.sugars.toFixed(1)} g`}
-                color={colors.textMuted}
-              />
-            )}
-            {calculated?.fiber != null && (
-              <NutritionRow
-                label="Fibres"
-                value={`${calculated.fiber.toFixed(1)} g`}
-                color={colors.textMuted}
-              />
-            )}
-            <NutritionRow
-              label="Protéines"
-              value={`${(calculated?.proteins ?? 0).toFixed(1)} g`}
-              color={colors.accent.proteins}
-            />
-            {calculated?.salt != null && (
-              <NutritionRow
-                label="Sel"
-                value={`${calculated.salt.toFixed(1)} g`}
-                color={colors.textMuted}
-              />
-            )}
-          </View>
-        )}
+        <PrimaryButton label="Enregistrer" onPress={handleSave} loading={saving} />
       </View>
-
-      {/* Meal selector — centered, just above button */}
-      <View style={{ alignItems: "center" }}>
-        <MealSelector value={selectedMeal} onChange={setSelectedMeal} wrap />
-      </View>
-
-      {/* Add button */}
-      <Pressable
-        onPress={handleAdd}
-        style={({ pressed }) => ({
-          backgroundColor: colors.accent.calories,
-          paddingVertical: 14,
-          borderRadius: 12,
-          borderCurve: "continuous",
-          alignItems: "center",
-          opacity: pressed ? 0.7 : 1,
-        })}
-      >
-        <Text style={{ color: "#fff", fontSize: 16, fontWeight: "600" }}>
-          {entryId ? "Modifier" : "Ajouter"}
-        </Text>
-      </Pressable>
-    </ScrollView>
-  );
-}
-
-interface NutritionRowProps {
-  label: string;
-  value: string;
-  color: string;
-}
-
-function NutritionRow({ label, value, color }: NutritionRowProps) {
-  return (
-    <View
-      style={{
-        flexDirection: "row",
-        justifyContent: "space-between",
-        alignItems: "center",
-      }}
-    >
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-        <View
-          style={{
-            width: 8,
-            height: 8,
-            borderRadius: 4,
-            backgroundColor: color,
-          }}
-        />
-        <Text style={{ fontSize: 14, color: "#999" }}>{label}</Text>
-      </View>
-      <Text
-        selectable
-        style={{
-          fontSize: 14,
-          fontWeight: "600",
-          color,
-          fontVariant: ["tabular-nums"],
-        }}
-      >
-        {value}
-      </Text>
     </View>
   );
 }
 
-interface EditRowProps {
-  label: string;
-  unit: string;
-  value: string;
-  onChange: (v: string) => void;
-  colors: ReturnType<typeof useThemeColors>;
-  optional?: boolean;
-}
-
-function EditRow({
-  label,
-  unit,
-  value,
-  onChange,
-  colors,
-  optional,
-}: EditRowProps) {
+function Label({ children, colors }: { children: string; colors: ThemeColors }) {
   return (
-    <View
-      style={{
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "space-between",
-      }}
-    >
-      <Text style={{ fontSize: 14, color: colors.textSecondary, flex: 1 }}>
-        {label}
-        {optional ? " (opt.)" : ""}
-      </Text>
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-        <TextInput
-          value={value}
-          onChangeText={onChange}
-          keyboardType="decimal-pad"
-          selectTextOnFocus
-          placeholder={optional ? "—" : "0"}
-          placeholderTextColor={colors.textMuted}
-          style={{
-            color: colors.textPrimary,
-            fontSize: 14,
-            fontWeight: "600",
-            textAlign: "right",
-            minWidth: 50,
-            paddingVertical: 4,
-            paddingHorizontal: 8,
-            backgroundColor: colors.isDark
-              ? "rgba(255,255,255,0.06)"
-              : "rgba(0,0,0,0.04)",
-            borderRadius: 6,
-            fontVariant: ["tabular-nums"],
-          }}
-        />
-        <Text style={{ fontSize: 13, color: colors.textMuted, minWidth: 28 }}>
-          {unit}
-        </Text>
-      </View>
-    </View>
+    <Text style={{ fontSize: 13, color: colors.textSecondary, marginLeft: 4, textTransform: "uppercase" }}>
+      {children}
+    </Text>
   );
 }

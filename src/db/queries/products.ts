@@ -2,35 +2,36 @@ import type { SQLiteDatabase } from "expo-sqlite";
 
 import type { ProductRow } from "@/types/database";
 
+const PRODUCT_COLUMNS = [
+  "id",
+  "name",
+  "brand",
+  "image_url",
+  "source",
+  "calories",
+  "proteins",
+  "carbs",
+  "fats",
+  "fiber",
+  "sugars",
+  "saturated_fat",
+  "salt",
+  "last_quantity",
+  "category",
+] as const satisfies readonly (keyof ProductRow)[];
+
+// Built from one column list so the update can never skip a column the insert writes.
+export const UPSERT_PRODUCT_SQL = `INSERT INTO products (${PRODUCT_COLUMNS.join(", ")})
+  VALUES (${PRODUCT_COLUMNS.map(() => "?").join(", ")})
+  ON CONFLICT(id) DO UPDATE SET ${PRODUCT_COLUMNS.filter((c) => c !== "id")
+    .map((c) => `${c} = excluded.${c}`)
+    .join(", ")}`;
+
 export async function upsertProduct(
   db: SQLiteDatabase,
   product: Omit<ProductRow, "created_at">,
 ): Promise<void> {
-  await db.runAsync(
-    `INSERT INTO products (id, name, brand, image_url, source, calories, proteins, carbs, fats, fiber, sugars, saturated_fat, salt, last_quantity, category)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT(id) DO UPDATE SET
-       name = excluded.name, brand = excluded.brand, image_url = excluded.image_url,
-       calories = excluded.calories, proteins = excluded.proteins, carbs = excluded.carbs,
-       fats = excluded.fats, fiber = excluded.fiber, sugars = excluded.sugars,
-       saturated_fat = excluded.saturated_fat, salt = excluded.salt, last_quantity = excluded.last_quantity,
-       category = excluded.category`,
-    product.id,
-    product.name,
-    product.brand,
-    product.image_url,
-    product.source,
-    product.calories,
-    product.proteins,
-    product.carbs,
-    product.fats,
-    product.fiber,
-    product.sugars,
-    product.saturated_fat,
-    product.salt,
-    product.last_quantity,
-    product.category,
-  );
+  await db.runAsync(UPSERT_PRODUCT_SQL, ...PRODUCT_COLUMNS.map((c) => product[c]));
 }
 
 export async function getProduct(
@@ -63,4 +64,27 @@ export async function updateLastQuantity(
     quantity,
     productId,
   );
+}
+
+export interface CatalogProduct extends ProductRow {
+  is_favorite: 0 | 1;
+  favorite_quantity: number | null;
+}
+
+/** Every known product, flagged when it is a favorite, in French alphabetical order. */
+export async function getCatalog(db: SQLiteDatabase): Promise<CatalogProduct[]> {
+  const rows = await db.getAllAsync<CatalogProduct>(
+    `SELECT p.*, (f.product_id IS NOT NULL) AS is_favorite, f.quantity AS favorite_quantity
+     FROM products p LEFT JOIN favorites f ON f.product_id = p.id`,
+  );
+  // SQLite sorts "Pâtes" after "Pommes": accents need a French collation.
+  return rows.sort((a, b) => a.name.localeCompare(b.name, "fr", { sensitivity: "base" }));
+}
+
+/** Usual portion: the favorite's quantity, else the last one eaten, else 100 g. */
+export function defaultPortion(p: {
+  favorite_quantity: number | null;
+  last_quantity: number | null;
+}): number {
+  return p.favorite_quantity || p.last_quantity || 100;
 }

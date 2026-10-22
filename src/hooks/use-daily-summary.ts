@@ -1,7 +1,7 @@
-import { useState, useCallback, useMemo } from "react";
-import { useFocusEffect } from "expo-router";
+import { useState, useCallback, useMemo, useRef } from "react";
 
 import { useDb } from "@/app/_layout";
+import { useRefreshOnFocus } from "@/hooks/use-refresh-on-focus";
 import { getEntriesByDate } from "@/db/queries/entries";
 import type { EntryRow } from "@/types/database";
 import type { DailySummaryRow } from "@/db/queries/entries";
@@ -21,14 +21,19 @@ export function useDailySummary(date: string) {
   const db = useDb();
   const [entries, setEntries] = useState<EntryRow[]>([]);
   const [loading, setLoading] = useState(true);
+  // Only the latest requested day may write its result: switching days fast
+  // must not let a slower, older query overwrite the screen.
+  const latestDate = useRef(date);
+  latestDate.current = date;
 
   const refresh = useCallback(async () => {
     const e = await getEntriesByDate(db, date);
+    if (latestDate.current !== date) return;
     setEntries(e);
     setLoading(false);
   }, [db, date]);
 
-  useFocusEffect(
+  useRefreshOnFocus(
     useCallback(() => {
       refresh();
     }, [refresh]),

@@ -1,4 +1,3 @@
-import { MEAL_TIME_RANGES } from "@/constants/meals";
 import type { NutritionValues, MealType } from "@/types/nutrition";
 
 export function calculateForQuantity(
@@ -19,15 +18,65 @@ export function calculateForQuantity(
   };
 }
 
-export function formatNumber(value: number, decimals: number = 1): string {
-  return value.toLocaleString("en-US", {
+const round1 = (v: number) => Math.round(v * 10) / 10;
+
+/**
+ * Values stored on an entry for `quantity` grams, rounded to 0.1 so every
+ * add path (add screen, edit, voice, Siri) stores the same numbers.
+ */
+export function entryNutrition(
+  per100g: NutritionValues,
+  quantity: number,
+): NutritionValues {
+  const n = calculateForQuantity(per100g, quantity);
+  const opt = (v: number | null) => (v === null ? null : round1(v));
+  return {
+    calories: round1(n.calories),
+    proteins: round1(n.proteins),
+    carbs: round1(n.carbs),
+    fats: round1(n.fats),
+    fiber: opt(n.fiber),
+    sugars: opt(n.sugars),
+    saturated_fat: opt(n.saturated_fat),
+    salt: opt(n.salt),
+  };
+}
+
+/**
+ * Values per 100 g recorded in an entry when it was logged. Entries are
+ * snapshots: editing one must not pull in later corrections of the product.
+ */
+export function entryPer100g(entry: NutritionValues & { quantity: number }): NutritionValues {
+  const k = entry.quantity > 0 ? 100 / entry.quantity : 0;
+  const opt = (v: number | null) => (v === null ? null : v * k);
+  return {
+    calories: entry.calories * k,
+    proteins: entry.proteins * k,
+    carbs: entry.carbs * k,
+    fats: entry.fats * k,
+    fiber: opt(entry.fiber),
+    sugars: opt(entry.sugars),
+    saturated_fat: opt(entry.saturated_fat),
+    salt: opt(entry.salt),
+  };
+}
+
+/** Grams with at most one decimal: "2,5", "3", "0,4". */
+export function formatAmount(value: number): string {
+  return value.toLocaleString("fr-FR", { maximumFractionDigits: 1 });
+}
+
+/** French number formatting: comma decimal, narrow no-break thousands. */
+export function formatNumber(value: number, decimals: number = 0): string {
+  return value.toLocaleString("fr-FR", {
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,
   });
 }
 
-export function getMealForTime(hour: number): MealType {
-  return hour < 17 ? "lunch" : "dinner";
+function csvCell(value: string | number): string {
+  const text = String(value);
+  return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 
 export function exportEntriesCsv(
@@ -52,7 +101,7 @@ export function exportEntriesCsv(
     [
       e.date,
       e.meal,
-      `"${e.product_name}"`,
+      csvCell(e.product_name),
       e.quantity,
       e.calories,
       e.proteins,

@@ -1,107 +1,54 @@
 import { useCallback, useState } from "react";
-import {
-  Alert,
-  Pressable,
-  ScrollView,
-  Switch,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { Alert, Pressable, ScrollView, Switch, Text, TextInput, View } from "react-native";
 import { File, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
+
 import { useDb } from "@/app/_layout";
+import { parseNumericInput } from "@/components/nutrition/numeric-field";
+import { Card } from "@/components/ui/card";
 import { MEALS } from "@/constants/meals";
-import { SPACING } from "@/constants/theme";
 import { getAllEntriesForExport } from "@/db/queries/entries";
-import { useThemeColors } from "@/hooks/use-theme-colors";
+import { useThemeColors, type ThemeColors } from "@/hooks/use-theme-colors";
 import { exportEntriesCsv } from "@/lib/nutrition-utils";
 import { useSettingsStore } from "@/stores/settings-store";
 import type { Goals } from "@/types/nutrition";
 
-// ---------- Section card wrapper ----------
-
-interface SectionCardProps {
-  title: string;
-  children: React.ReactNode;
-  backgroundColor: string;
-  titleColor: string;
-  separatorColor: string;
-}
-
-function SectionCard({
-  title,
-  children,
-  backgroundColor,
-  titleColor,
-  separatorColor,
-}: SectionCardProps) {
+function Section({ title, footer, children }: { title: string; footer?: string; children: React.ReactNode }) {
+  const colors = useThemeColors();
   return (
-    <View style={{ marginBottom: SPACING.lg }}>
-      <Text
-        style={{
-          color: titleColor,
-          fontSize: 13,
-          fontWeight: "600",
-          textTransform: "uppercase",
-          letterSpacing: 0.5,
-          marginBottom: SPACING.xs,
-          marginLeft: SPACING.xs,
-        }}
-      >
+    <View style={{ gap: 6 }}>
+      <Text style={{ fontSize: 13, color: colors.textSecondary, marginLeft: 16, textTransform: "uppercase" }}>
         {title}
       </Text>
-      <View
-        style={{
-          backgroundColor,
-          borderRadius: 16,
-          borderCurve: "continuous",
-          overflow: "hidden",
-        }}
-      >
-        {children}
-      </View>
+      <Card>{children}</Card>
+      {footer ? (
+        <Text style={{ fontSize: 13, color: colors.textSecondary, marginHorizontal: 16, lineHeight: 18 }}>
+          {footer}
+        </Text>
+      ) : null}
     </View>
   );
 }
 
-// ---------- Row wrappers ----------
-
-interface RowProps {
-  separatorColor: string;
-  isLast?: boolean;
-  children: React.ReactNode;
-}
-
-function Row({ separatorColor, isLast, children }: RowProps) {
+function Row({ first, children }: { first?: boolean; children: React.ReactNode }) {
+  const colors = useThemeColors();
   return (
-    <View>
-      <View
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          justifyContent: "space-between",
-          paddingHorizontal: SPACING.lg,
-          paddingVertical: SPACING.md,
-          minHeight: 48,
-        }}
-      >
+    <View style={{ minHeight: 48, justifyContent: "center" }}>
+      {!first && (
+        <View style={{ position: "absolute", top: 0, left: 16, right: 0, height: 0.5, backgroundColor: colors.separator }} />
+      )}
+      <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 8, gap: 12 }}>
         {children}
       </View>
-      {!isLast && (
-        <View
-          style={{
-            height: 1,
-            backgroundColor: separatorColor,
-            marginLeft: SPACING.lg,
-          }}
-        />
-      )}
     </View>
   );
 }
 
-// ---------- Goals section ----------
+function greenSwitch(colors: ThemeColors) {
+  return { trackColor: { false: colors.fill, true: colors.accent.calories }, thumbColor: "#ffffff" };
+}
+
+// ---------- Goals ----------
 
 const MAIN_GOALS: { key: keyof Goals; label: string; unit: string }[] = [
   { key: "calories", label: "Calories", unit: "kcal" },
@@ -113,299 +60,128 @@ const MAIN_GOALS: { key: keyof Goals; label: string; unit: string }[] = [
 const OPTIONAL_GOALS: { key: keyof Goals; label: string; unit: string }[] = [
   { key: "fiber", label: "Fibres", unit: "g" },
   { key: "sugars", label: "Sucres", unit: "g" },
-  { key: "saturated_fat", label: "Acides gras saturés", unit: "g" },
+  { key: "saturated_fat", label: "Graisses saturées", unit: "g" },
   { key: "salt", label: "Sel", unit: "g" },
 ];
 
-interface GoalsSectionProps {
-  colors: ReturnType<typeof useThemeColors>;
-}
-
-function GoalsSection({ colors }: GoalsSectionProps) {
-  const goals = useSettingsStore((s) => s.goals);
+function GoalInput({ goalKey, unit }: { goalKey: keyof Goals; unit: string }) {
+  const colors = useThemeColors();
+  const value = useSettingsStore((s) => s.goals[goalKey]);
   const setGoals = useSettingsStore((s) => s.setGoals);
+  const [text, setText] = useState(value != null ? String(value).replace(".", ",") : "");
 
-  // Local state for text inputs (string representation)
-  const [localValues, setLocalValues] = useState<Record<keyof Goals, string>>(
-    () => ({
-      calories: goals.calories !== null ? String(goals.calories) : "",
-      proteins: goals.proteins !== null ? String(goals.proteins) : "",
-      carbs: goals.carbs !== null ? String(goals.carbs) : "",
-      fats: goals.fats !== null ? String(goals.fats) : "",
-      fiber: goals.fiber !== null ? String(goals.fiber) : "",
-      sugars: goals.sugars !== null ? String(goals.sugars) : "",
-      saturated_fat:
-        goals.saturated_fat !== null ? String(goals.saturated_fat) : "",
-      salt: goals.salt !== null ? String(goals.salt) : "",
-    }),
-  );
-
-  // Show/hide optional fields
-  const [showOptional, setShowOptional] = useState<
-    Partial<Record<keyof Goals, boolean>>
-  >(() => ({
-    fiber: goals.fiber !== null,
-    sugars: goals.sugars !== null,
-    saturated_fat: goals.saturated_fat !== null,
-    salt: goals.salt !== null,
-  }));
-
-  const handleBlur = useCallback(
-    (key: keyof Goals) => {
-      const raw = localValues[key].trim();
-      if (raw === "") {
-        setGoals({ [key]: null });
-      } else {
-        const parsed = parseFloat(raw);
-        if (!isNaN(parsed) && parsed >= 0) {
-          setGoals({ [key]: parsed });
-        }
-      }
-    },
-    [localValues, setGoals],
-  );
-
-  const toggleOptional = useCallback(
-    (key: keyof Goals, value: boolean) => {
-      setShowOptional((prev) => ({ ...prev, [key]: value }));
-      if (!value) {
-        setLocalValues((prev) => ({ ...prev, [key]: "" }));
-        setGoals({ [key]: null });
-      }
-    },
-    [setGoals],
-  );
-
-  const allMainRows = MAIN_GOALS.length;
-  const visibleOptional = OPTIONAL_GOALS.filter((g) => showOptional[g.key]);
-  const hiddenOptional = OPTIONAL_GOALS.filter((g) => !showOptional[g.key]);
-  const totalRows =
-    allMainRows + visibleOptional.length + hiddenOptional.length;
-  let rowIndex = 0;
+  const commit = () => {
+    const parsed = parseNumericInput(text);
+    if (text.trim() === "") setGoals({ [goalKey]: null });
+    else if (parsed != null && parsed >= 0) setGoals({ [goalKey]: parsed });
+    else setText(value != null ? String(value).replace(".", ",") : "");
+  };
 
   return (
-    <SectionCard
-      title="Objectifs quotidiens"
-      backgroundColor={colors.card}
-      titleColor={colors.textSecondary}
-      separatorColor={colors.separator}
-    >
-      {MAIN_GOALS.map((goal, i) => {
-        rowIndex++;
-        return (
-          <Row
-            key={goal.key}
-            separatorColor={colors.separator}
-            isLast={rowIndex === totalRows}
-          >
-            <Text style={{ color: colors.textPrimary, fontSize: 16, flex: 1 }}>
-              {goal.label}
-            </Text>
-            <View
-              style={{ flexDirection: "row", alignItems: "center", gap: 4 }}
-            >
-              <TextInput
-                value={localValues[goal.key]}
-                onChangeText={(v) =>
-                  setLocalValues((prev) => ({ ...prev, [goal.key]: v }))
-                }
-                onBlur={() => handleBlur(goal.key)}
-                keyboardType="numeric"
-                selectTextOnFocus
-                placeholder="—"
-                placeholderTextColor={colors.textMuted}
-                style={{
-                  color: colors.textPrimary,
-                  fontSize: 16,
-                  textAlign: "right",
-                  minWidth: 60,
-                }}
-              />
-              <Text
-                style={{
-                  color: colors.textSecondary,
-                  fontSize: 14,
-                  minWidth: 28,
-                }}
-              >
-                {goal.unit}
-              </Text>
-            </View>
-          </Row>
-        );
-      })}
-
-      {/* Visible optional goals */}
-      {visibleOptional.map((goal) => {
-        rowIndex++;
-        return (
-          <Row
-            key={goal.key}
-            separatorColor={colors.separator}
-            isLast={rowIndex === totalRows}
-          >
-            <Text style={{ color: colors.textPrimary, fontSize: 16, flex: 1 }}>
-              {goal.label}
-            </Text>
-            <View
-              style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
-            >
-              <View
-                style={{ flexDirection: "row", alignItems: "center", gap: 4 }}
-              >
-                <TextInput
-                  value={localValues[goal.key]}
-                  onChangeText={(v) =>
-                    setLocalValues((prev) => ({ ...prev, [goal.key]: v }))
-                  }
-                  onBlur={() => handleBlur(goal.key)}
-                  keyboardType="numeric"
-                  placeholder="—"
-                  placeholderTextColor={colors.textMuted}
-                  style={{
-                    color: colors.textPrimary,
-                    fontSize: 16,
-                    textAlign: "right",
-                    minWidth: 60,
-                  }}
-                />
-                <Text
-                  style={{
-                    color: colors.textSecondary,
-                    fontSize: 14,
-                    minWidth: 28,
-                  }}
-                >
-                  {goal.unit}
-                </Text>
-              </View>
-              <Switch
-                value={true}
-                onValueChange={(v) => toggleOptional(goal.key, v)}
-                trackColor={{
-                  false: colors.separator,
-                  true: colors.accent.calories,
-                }}
-                thumbColor="#ffffff"
-              />
-            </View>
-          </Row>
-        );
-      })}
-
-      {/* Hidden optional goals (toggle to enable) */}
-      {hiddenOptional.map((goal) => {
-        rowIndex++;
-        return (
-          <Row
-            key={goal.key}
-            separatorColor={colors.separator}
-            isLast={rowIndex === totalRows}
-          >
-            <Text
-              style={{ color: colors.textSecondary, fontSize: 16, flex: 1 }}
-            >
-              {goal.label}
-            </Text>
-            <Switch
-              value={false}
-              onValueChange={(v) => toggleOptional(goal.key, v)}
-              trackColor={{
-                false: colors.separator,
-                true: colors.accent.calories,
-              }}
-              thumbColor="#ffffff"
-            />
-          </Row>
-        );
-      })}
-    </SectionCard>
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+      <TextInput
+        value={text}
+        onChangeText={setText}
+        onBlur={commit}
+        onSubmitEditing={commit}
+        keyboardType="decimal-pad"
+        selectTextOnFocus
+        placeholder="–"
+        placeholderTextColor={colors.textMuted}
+        style={{ minWidth: 64, textAlign: "right", fontSize: 17, color: colors.textPrimary, fontVariant: ["tabular-nums"] }}
+      />
+      <Text style={{ width: 30, fontSize: 15, color: colors.textSecondary }}>{unit}</Text>
+    </View>
   );
 }
 
-// ---------- Meals section ----------
+function GoalsSection() {
+  const colors = useThemeColors();
+  const goals = useSettingsStore((s) => s.goals);
+  const setGoals = useSettingsStore((s) => s.setGoals);
+  // An optional goal is shown once switched on, even before a value is typed.
+  const [shown, setShown] = useState<Partial<Record<keyof Goals, boolean>>>(() =>
+    Object.fromEntries(OPTIONAL_GOALS.map((g) => [g.key, goals[g.key] != null])),
+  );
 
-interface MealsSectionProps {
-  colors: ReturnType<typeof useThemeColors>;
+  return (
+    <Section
+      title="Objectifs par jour"
+      footer="Fibres, sucres, graisses saturées et sel s'affichent sur l'écran du jour dès qu'ils ont un objectif."
+    >
+      {MAIN_GOALS.map((g, i) => (
+        <Row key={g.key} first={i === 0}>
+          <Text style={{ flex: 1, fontSize: 17, color: colors.textPrimary }}>{g.label}</Text>
+          <GoalInput goalKey={g.key} unit={g.unit} />
+        </Row>
+      ))}
+      {OPTIONAL_GOALS.map((g) => (
+        <Row key={g.key}>
+          <Text style={{ flex: 1, fontSize: 17, color: shown[g.key] ? colors.textPrimary : colors.textSecondary }}>
+            {g.label}
+          </Text>
+          {shown[g.key] && <GoalInput goalKey={g.key} unit={g.unit} />}
+          <Switch
+            value={!!shown[g.key]}
+            onValueChange={(on) => {
+              setShown((prev) => ({ ...prev, [g.key]: on }));
+              if (!on) setGoals({ [g.key]: null });
+            }}
+            {...greenSwitch(colors)}
+          />
+        </Row>
+      ))}
+    </Section>
+  );
 }
 
-function MealsSection({ colors }: MealsSectionProps) {
+// ---------- Meals ----------
+
+function MealsSection() {
+  const colors = useThemeColors();
   const enabledMeals = useSettingsStore((s) => s.enabledMeals);
   const toggleMeal = useSettingsStore((s) => s.toggleMeal);
 
   return (
-    <SectionCard
-      title="Repas actifs"
-      backgroundColor={colors.card}
-      titleColor={colors.textSecondary}
-      separatorColor={colors.separator}
+    <Section
+      title="Repas affichés"
+      footer="Le premier ajout du jour va au déjeuner, les suivants au dîner."
     >
       {MEALS.map((meal, i) => (
-        <Row
-          key={meal.type}
-          separatorColor={colors.separator}
-          isLast={i === MEALS.length - 1}
-        >
-          <Text style={{ color: colors.textPrimary, fontSize: 16 }}>
-            {meal.label}
-          </Text>
-          <Switch
-            value={enabledMeals[meal.type]}
-            onValueChange={() => toggleMeal(meal.type)}
-            trackColor={{
-              false: colors.separator,
-              true: colors.accent.calories,
-            }}
-            thumbColor="#ffffff"
-          />
+        <Row key={meal.type} first={i === 0}>
+          <Text style={{ flex: 1, fontSize: 17, color: colors.textPrimary }}>{meal.label}</Text>
+          <Switch value={enabledMeals[meal.type]} onValueChange={() => toggleMeal(meal.type)} {...greenSwitch(colors)} />
         </Row>
       ))}
-    </SectionCard>
+    </Section>
   );
 }
 
-// ---------- Theme section ----------
+// ---------- Appearance ----------
 
-interface ThemeSectionProps {
-  colors: ReturnType<typeof useThemeColors>;
-}
-
-function ThemeSection({ colors }: ThemeSectionProps) {
+function AppearanceSection() {
+  const colors = useThemeColors();
   const theme = useSettingsStore((s) => s.theme);
   const setTheme = useSettingsStore((s) => s.setTheme);
 
   return (
-    <SectionCard
-      title="Thème"
-      backgroundColor={colors.card}
-      titleColor={colors.textSecondary}
-      separatorColor={colors.separator}
-    >
-      <Row separatorColor={colors.separator} isLast>
-        <Text style={{ color: colors.textPrimary, fontSize: 16 }}>
-          Mode sombre
-        </Text>
+    <Section title="Apparence">
+      <Row first>
+        <Text style={{ flex: 1, fontSize: 17, color: colors.textPrimary }}>Mode sombre</Text>
         <Switch
           value={theme === "dark"}
           onValueChange={(v) => setTheme(v ? "dark" : "light")}
-          trackColor={{
-            false: colors.separator,
-            true: colors.accent.calories,
-          }}
-          thumbColor="#ffffff"
+          {...greenSwitch(colors)}
         />
       </Row>
-    </SectionCard>
+    </Section>
   );
 }
 
-// ---------- Export section ----------
+// ---------- Export ----------
 
-interface ExportSectionProps {
-  colors: ReturnType<typeof useThemeColors>;
-}
-
-function ExportSection({ colors }: ExportSectionProps) {
+function ExportSection() {
+  const colors = useThemeColors();
   const db = useDb();
   const [exporting, setExporting] = useState(false);
 
@@ -415,80 +191,58 @@ function ExportSection({ colors }: ExportSectionProps) {
     try {
       const entries = await getAllEntriesForExport(db);
       if (entries.length === 0) {
-        Alert.alert("Aucune donnée", "Aucune entrée à exporter.");
+        Alert.alert("Aucune donnée", "Aucun aliment à exporter.");
         return;
       }
-      const csv = exportEntriesCsv(entries);
-      const file = new File(Paths.cache, `kalor_export_${Date.now()}.csv`);
-      file.write(csv);
-      const available = await Sharing.isAvailableAsync();
-      if (available) {
+      const file = new File(Paths.cache, `kalorapp_export_${Date.now()}.csv`);
+      file.write(exportEntriesCsv(entries));
+      if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(file.uri, {
           mimeType: "text/csv",
-          dialogTitle: "Exporter les donnees nutritionnelles",
+          dialogTitle: "Exporter le journal",
           UTI: "public.comma-separated-values-text",
         });
       } else {
-        Alert.alert(
-          "Partage indisponible",
-          "Le partage de fichiers n'est pas disponible sur cet appareil.",
-        );
+        Alert.alert("Partage indisponible", "Le partage de fichiers n'est pas disponible sur cet appareil.");
       }
-    } catch (e) {
-      Alert.alert("Erreur", "Une erreur est survenue lors de l'export.");
+    } catch {
+      Alert.alert("Erreur", "L'export a échoué. Réessaie.");
     } finally {
       setExporting(false);
     }
   }, [db, exporting]);
 
   return (
-    <SectionCard
-      title="Données"
-      backgroundColor={colors.card}
-      titleColor={colors.textSecondary}
-      separatorColor={colors.separator}
-    >
-      <Row separatorColor={colors.separator} isLast>
-        <Text style={{ color: colors.textPrimary, fontSize: 16 }}>
-          Exporter en CSV
-        </Text>
-        <Pressable
-          onPress={() => void handleExport()}
-          disabled={exporting}
-          style={({ pressed }) => ({
-            opacity: exporting ? 0.5 : pressed ? 0.7 : 1,
-            backgroundColor: colors.accent.calories,
-            paddingHorizontal: SPACING.md,
-            paddingVertical: SPACING.xs + 2,
-            borderRadius: 8,
-            borderCurve: "continuous",
-          })}
-        >
-          <Text style={{ color: "#000000", fontWeight: "600", fontSize: 14 }}>
-            {exporting ? "Export..." : "Exporter"}
+    <Section title="Données">
+      <Pressable
+        onPress={() => void handleExport()}
+        disabled={exporting}
+        style={({ pressed }) => ({ backgroundColor: pressed ? colors.fill : "transparent" })}
+      >
+        <Row first>
+          <Text style={{ flex: 1, fontSize: 17, color: colors.accent.caloriesText }}>
+            {exporting ? "Export en cours…" : "Exporter le journal (CSV)"}
           </Text>
-        </Pressable>
-      </Row>
-    </SectionCard>
+        </Row>
+      </Pressable>
+    </Section>
   );
 }
 
-// ---------- Main screen ----------
-
 export default function SettingsScreen() {
   const colors = useThemeColors();
-
   return (
     <ScrollView
-      style={{ flex: 1, backgroundColor: colors.backgroundSecondary }}
-      contentContainerStyle={{ padding: SPACING.lg, paddingBottom: 48 }}
-      contentInsetAdjustmentBehavior="automatic"
+      style={{ flex: 1, backgroundColor: colors.background }}
+      contentContainerStyle={{ padding: 16, paddingBottom: 48, gap: 24 }}
       keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="on-drag"
+      automaticallyAdjustKeyboardInsets
     >
-      <GoalsSection colors={colors} />
-      <MealsSection colors={colors} />
-      <ThemeSection colors={colors} />
-      <ExportSection colors={colors} />
+      <GoalsSection />
+      <MealsSection />
+      <AppearanceSection />
+      <ExportSection />
     </ScrollView>
   );
 }

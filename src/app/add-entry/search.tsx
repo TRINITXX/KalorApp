@@ -1,66 +1,61 @@
 import { useCallback, useEffect, useState } from "react";
-import {
-  ActivityIndicator,
-  Pressable,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
-import { useRouter } from "expo-router";
+import { ActivityIndicator, Alert, Pressable, Text, TextInput, View } from "react-native";
+import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { FlashList } from "@shopify/flash-list";
 import { SymbolView } from "expo-symbols";
 import * as Haptics from "expo-haptics";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useDb } from "@/app/_layout";
-import { useThemeColors } from "@/hooks/use-theme-colors";
-import { useDebounce } from "@/hooks/use-debounce";
-import { searchProducts, fetchProduct } from "@/lib/open-food-facts";
-import type { SearchResult } from "@/lib/open-food-facts";
-import { upsertProduct } from "@/db/queries/products";
+import { CheckCircle } from "@/components/ui/check-circle";
+import { CloseButton } from "@/components/ui/close-button";
+import { PrimaryButton } from "@/components/ui/primary-button";
+import { ProductThumb } from "@/components/ui/product-thumb";
 import { addFavorite } from "@/db/queries/favorites";
+import { upsertProduct } from "@/db/queries/products";
+import { useDebounce } from "@/hooks/use-debounce";
+import { useThemeColors } from "@/hooks/use-theme-colors";
+import { fetchProduct, searchProducts, type SearchResult } from "@/lib/open-food-facts";
+import { formatNumber } from "@/lib/nutrition-utils";
 import { flattenProductForDb } from "@/lib/product-utils";
 import { useCheckedProductsStore } from "@/stores/checked-products-store";
 
+/**
+ * OpenFoodFacts search. Opened from the add screen (mode=pick), the checked
+ * products come back selected there. Opened from Favorites, they become favorites.
+ */
 export default function SearchScreen() {
   const router = useRouter();
   const db = useDb();
   const colors = useThemeColors();
-  const [query, setQuery] = useState("");
-  const debouncedQuery = useDebounce(query, 300);
+  const insets = useSafeAreaInsets();
+  const { mode, q } = useLocalSearchParams<{ mode?: string; q?: string }>();
+  const picking = mode === "pick";
+
+  const [query, setQuery] = useState(q ?? "");
+  const debouncedQuery = useDebounce(query.trim(), 350);
   const [results, setResults] = useState<SearchResult[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [searched, setSearched] = useState(false);
-  const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
+  const [status, setStatus] = useState<"idle" | "loading" | "done" | "error">("idle");
+  const [checkedIds, setCheckedIds] = useState<string[]>([]);
   const [fetchingId, setFetchingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (debouncedQuery.length < 2) {
       setResults([]);
-      setSearched(false);
+      setStatus("idle");
       return;
     }
-
     let cancelled = false;
-
-    const doSearch = async () => {
-      setLoading(true);
-      try {
-        const data = await searchProducts(debouncedQuery);
-        if (!cancelled) {
-          setResults(data);
-          setSearched(true);
-        }
-      } catch {
-        if (!cancelled) {
-          setResults([]);
-          setSearched(true);
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    };
-
-    doSearch();
+    setStatus("loading");
+    searchProducts(debouncedQuery)
+      .then((data) => {
+        if (cancelled) return;
+        setResults(data);
+        setStatus("done");
+      })
+      .catch(() => {
+        if (!cancelled) setStatus("error");
+      });
     return () => {
       cancelled = true;
     };
@@ -69,257 +64,155 @@ export default function SearchScreen() {
   const handleToggle = useCallback(
     async (result: SearchResult) => {
       if (fetchingId) return;
-
-      // Uncheck
-      if (checkedIds.has(result.id)) {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        setCheckedIds((prev) => {
-          const next = new Set(prev);
-          next.delete(result.id);
-          return next;
-        });
+      if (checkedIds.includes(result.id)) {
+        Haptics.selectionAsync();
+        setCheckedIds((prev) => prev.filter((id) => id !== result.id));
         return;
       }
-
-      // Check — fetch full product and save to DB + favorites
       setFetchingId(result.id);
       try {
-        const fullProduct = await fetchProduct(result.id);
-        if (fullProduct) {
-          await upsertProduct(db, flattenProductForDb(fullProduct));
-        } else {
-          await upsertProduct(db, {
-            id: result.id,
-            name: result.name,
-            brand: result.brand,
-            image_url: result.image_url,
-            source: "openfoodfacts",
-            category: "side" as const,
-            calories: result.calories ?? 0,
-            proteins: 0,
-            carbs: 0,
-            fats: 0,
-            fiber: null,
-            sugars: null,
-            saturated_fat: null,
-            salt: null,
-            last_quantity: 100,
-          });
+        // The search result has no macros: only the full product sheet is saved.
+        const full = await fetchProduct(result.id);
+        if (!full) {
+          Alert.alert(
+            "Fiche introuvable",
+            "OpenFoodFacts ne donne pas les valeurs de ce produit. Crée-le à la main.",
+          );
+          return;
         }
-        await addFavorite(db, result.id);
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        setCheckedIds((prev) => new Set(prev).add(result.id));
+        await upsertProduct(db, flattenProductForDb(full));
+        if (!picking) await addFavorite(db, result.id);
+        Haptics.selectionAsync();
+        setCheckedIds((prev) => [...prev, result.id]);
       } catch {
-        // Save basic data on failure
-        try {
-          await upsertProduct(db, {
-            id: result.id,
-            name: result.name,
-            brand: result.brand,
-            image_url: result.image_url,
-            source: "openfoodfacts",
-            category: "side" as const,
-            calories: result.calories ?? 0,
-            proteins: 0,
-            carbs: 0,
-            fats: 0,
-            fiber: null,
-            sugars: null,
-            saturated_fat: null,
-            salt: null,
-            last_quantity: 100,
-          });
-          await addFavorite(db, result.id);
-          setCheckedIds((prev) => new Set(prev).add(result.id));
-        } catch {
-          // silently fail
-        }
+        Alert.alert("Pas de réseau", "Le produit n'a pas pu être chargé. Réessaie.");
       } finally {
         setFetchingId(null);
       }
     },
-    [checkedIds, db, fetchingId],
+    [checkedIds, db, fetchingId, picking],
   );
 
   const handleValidate = useCallback(() => {
-    useCheckedProductsStore.getState().setIds([...checkedIds]);
+    if (picking) useCheckedProductsStore.getState().pick(checkedIds);
     router.back();
-  }, [checkedIds, router]);
+  }, [checkedIds, picking, router]);
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
-      <View style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8 }}>
-        <TextInput
-          value={query}
-          onChangeText={setQuery}
-          placeholder="Rechercher un produit..."
-          placeholderTextColor={colors.textMuted}
-          autoFocus
-          returnKeyType="search"
-          clearButtonMode="while-editing"
+      <Stack.Screen options={{ headerLeft: picking ? undefined : () => <CloseButton /> }} />
+      <View style={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8 }}>
+        <View
           style={{
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 8,
             backgroundColor: colors.card,
-            color: colors.textPrimary,
-            fontSize: 16,
-            paddingHorizontal: 14,
-            paddingVertical: 10,
-            borderRadius: 12,
+            borderRadius: 10,
             borderCurve: "continuous",
-            borderWidth: 1,
-            borderColor: colors.separator,
-          }}
-        />
-      </View>
-
-      {loading && (
-        <ActivityIndicator style={{ marginTop: 24 }} color={colors.textMuted} />
-      )}
-
-      {!loading && searched && results.length === 0 && (
-        <Text
-          style={{
-            textAlign: "center",
-            color: colors.textMuted,
-            fontSize: 15,
-            marginTop: 32,
+            paddingHorizontal: 10,
           }}
         >
-          Aucun résultat
+          <SymbolView name="magnifyingglass" size={16} tintColor={colors.textSecondary} />
+          <TextInput
+            value={query}
+            onChangeText={setQuery}
+            placeholder="Produit ou marque"
+            placeholderTextColor={colors.textSecondary}
+            autoFocus
+            returnKeyType="search"
+            clearButtonMode="while-editing"
+            autoCorrect={false}
+            style={{ flex: 1, paddingVertical: 10, fontSize: 17, color: colors.textPrimary }}
+          />
+        </View>
+      </View>
+
+      {status === "loading" && <ActivityIndicator style={{ marginTop: 24 }} color={colors.textSecondary} />}
+      {status === "error" && (
+        <Text style={{ textAlign: "center", color: colors.textSecondary, fontSize: 15, marginTop: 32, paddingHorizontal: 32 }}>
+          Recherche impossible. Vérifie ta connexion.
+        </Text>
+      )}
+      {status === "done" && results.length === 0 && (
+        <Text style={{ textAlign: "center", color: colors.textSecondary, fontSize: 15, marginTop: 32 }}>
+          Aucun résultat sur OpenFoodFacts
         </Text>
       )}
 
       <FlashList
-        data={results}
+        data={status === "loading" ? [] : results}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={{ paddingBottom: checkedIds.size > 0 ? 100 : 0 }}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        contentContainerStyle={{ paddingBottom: checkedIds.length > 0 ? 110 : 24 }}
         renderItem={({ item }) => {
-          const isChecked = checkedIds.has(item.id);
-          const isFetching = fetchingId === item.id;
+          const checked = checkedIds.includes(item.id);
+          const fetching = fetchingId === item.id;
           return (
             <Pressable
               onPress={() => handleToggle(item)}
-              disabled={isFetching}
+              disabled={fetching}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked }}
               style={({ pressed }) => ({
                 flexDirection: "row",
                 alignItems: "center",
-                minHeight: 44,
+                gap: 12,
                 paddingVertical: 10,
                 paddingHorizontal: 16,
-                gap: 12,
-                opacity: pressed ? 0.7 : 1,
+                backgroundColor: pressed ? colors.fill : "transparent",
               })}
             >
-              {/* Checkbox */}
-              {isFetching ? (
-                <ActivityIndicator
-                  size="small"
-                  color={colors.accent.calories}
-                  style={{ width: 24, height: 24 }}
-                />
+              {fetching ? (
+                <ActivityIndicator style={{ width: 24, height: 24 }} color={colors.accent.calories} />
               ) : (
-                <View
-                  style={{
-                    width: 24,
-                    height: 24,
-                    borderRadius: 6,
-                    borderWidth: 2,
-                    borderColor: isChecked
-                      ? colors.accent.calories
-                      : colors.separator,
-                    backgroundColor: isChecked
-                      ? colors.accent.calories
-                      : "transparent",
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
-                >
-                  {isChecked && (
-                    <SymbolView name="checkmark" size={14} tintColor="#fff" />
-                  )}
-                </View>
+                <CheckCircle checked={checked} />
               )}
-
-              {/* Name + Brand */}
-              <View style={{ flex: 1 }}>
-                <Text
-                  style={{
-                    fontSize: 15,
-                    fontWeight: "500",
-                    color: colors.textPrimary,
-                  }}
-                  numberOfLines={1}
-                >
+              <ProductThumb uri={item.image_url} size={40} />
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text numberOfLines={1} style={{ fontSize: 16, color: colors.textPrimary }}>
                   {item.name}
                 </Text>
                 {item.brand ? (
-                  <Text
-                    style={{
-                      fontSize: 13,
-                      color: colors.textSecondary,
-                      marginTop: 2,
-                    }}
-                    numberOfLines={1}
-                  >
+                  <Text numberOfLines={1} style={{ fontSize: 13, color: colors.textSecondary, marginTop: 1 }}>
                     {item.brand}
                   </Text>
                 ) : null}
               </View>
-
-              {/* Calories */}
               {item.calories != null && (
-                <Text
-                  style={{
-                    fontSize: 14,
-                    fontWeight: "500",
-                    color: colors.textMuted,
-                    fontVariant: ["tabular-nums"],
-                  }}
-                >
-                  {Math.round(item.calories)} kcal
+                <Text style={{ fontSize: 13, color: colors.textSecondary, fontVariant: ["tabular-nums"] }}>
+                  {formatNumber(item.calories)} kcal/100 g
                 </Text>
               )}
             </Pressable>
           );
         }}
-        ItemSeparatorComponent={() => (
-          <View
-            style={{
-              height: 1,
-              backgroundColor: colors.separator,
-              marginLeft: 52,
-            }}
-          />
-        )}
       />
 
-      {/* Validate button */}
-      {checkedIds.size > 0 && (
+      {checkedIds.length > 0 && (
         <View
           style={{
             position: "absolute",
-            bottom: 0,
             left: 0,
             right: 0,
-            padding: 16,
-            paddingBottom: 32,
+            bottom: 0,
+            paddingHorizontal: 16,
+            paddingTop: 10,
+            paddingBottom: insets.bottom + 8,
             backgroundColor: colors.background,
+            borderTopWidth: 0.5,
+            borderTopColor: colors.separator,
           }}
         >
-          <Pressable
+          <PrimaryButton
+            label={
+              picking
+                ? `Choisir ${checkedIds.length} produit${checkedIds.length > 1 ? "s" : ""}`
+                : `${checkedIds.length} ajouté${checkedIds.length > 1 ? "s" : ""} aux favoris`
+            }
             onPress={handleValidate}
-            style={({ pressed }) => ({
-              backgroundColor: colors.accent.calories,
-              borderRadius: 12,
-              borderCurve: "continuous",
-              paddingVertical: 14,
-              alignItems: "center",
-              opacity: pressed ? 0.7 : 1,
-            })}
-          >
-            <Text style={{ fontSize: 16, fontWeight: "700", color: "#fff" }}>
-              Valider ({checkedIds.size})
-            </Text>
-          </Pressable>
+          />
         </View>
       )}
     </View>
