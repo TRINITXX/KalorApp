@@ -325,9 +325,10 @@ export default function AddEntryScreen() {
                     gap: 6,
                   }}
                 >
-                  {([1, 2, 3, 4] as const).map((m) => {
+                  {([0.5, 1, 2, 3, 4] as const).map((m) => {
                     const base = baseQuantities[item.product.id] || 100;
-                    const active = item.quantity === base * m;
+                    const target = Math.round(base * m);
+                    const active = item.quantity === target;
                     return (
                       <Pressable
                         key={m}
@@ -337,7 +338,7 @@ export default function AddEntryScreen() {
                           );
                           setQuantities((prev) => ({
                             ...prev,
-                            [item.product.id]: base * m,
+                            [item.product.id]: target,
                           }));
                         }}
                         style={({ pressed }) => ({
@@ -360,7 +361,7 @@ export default function AddEntryScreen() {
                             color: active ? "#fff" : colors.textSecondary,
                           }}
                         >
-                          x{m}
+                          {m === 0.5 ? "\u00BD" : `x${m}`}
                         </Text>
                       </Pressable>
                     );
